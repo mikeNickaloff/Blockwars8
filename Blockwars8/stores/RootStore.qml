@@ -807,9 +807,6 @@ Store {
                 if (!slotState) {
                     continue
                 }
-                if (slotState.deployed) {
-                    continue
-                }
                 if (colorFilter && slotState.color && slotState.color.toLowerCase() !== colorFilter) {
                     continue
                 }

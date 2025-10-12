@@ -490,6 +490,7 @@ Item {
             property var dashboardPowerData: ({ "0": [], "1": [] })
             property var powerupRuntimeState: ({})
             property var dragPermissions: ({ "0": {}, "1": {} })
+            property var activationPermissions: ({ "0": {}, "1": {} })
             property var gridIdleState: ({ "0": false, "1": false })
             property var gridMovesRemaining: ({ "0": 0, "1": 0 })
             property int activeGridId: -1
@@ -668,12 +669,15 @@ Item {
             function updateRuntimeState(runtime) {
                 powerupRuntimeState = runtime || {}
                 computeDragPermissions()
+                computeActivationPermissions()
                 powerupRuntimeChanged()
                 if (topDashboard) {
                     topDashboard.runtimeSlots = runtimeSlotsFor(0)
+                    topDashboard.activationPermissions = activationPermissions["0"] || {}
                 }
                 if (bottomDashboard) {
                     bottomDashboard.runtimeSlots = runtimeSlotsFor(1)
+                    bottomDashboard.activationPermissions = activationPermissions["1"] || {}
                 }
             }
 
@@ -687,6 +691,7 @@ Item {
                 updated[key] = idle
                 gridIdleState = Object.assign({}, gridIdleState, updated)
                 computeDragPermissions()
+                computeActivationPermissions()
             }
 
             function updateMoves(gridId, moves) {
@@ -695,11 +700,13 @@ Item {
                 updated[key] = moves
                 gridMovesRemaining = Object.assign({}, gridMovesRemaining, updated)
                 computeDragPermissions()
+                computeActivationPermissions()
             }
 
             function updateActiveGrid(gridId) {
                 activeGridId = gridId
                 computeDragPermissions()
+                computeActivationPermissions()
             }
 
             function computeDragPermissions() {
@@ -732,6 +739,39 @@ Item {
                 }
                 if (bottomDashboard) {
                     bottomDashboard.dragPermissions = dragPermissions["1"]
+                }
+            }
+
+            function computeActivationPermissions() {
+                var permissions = { "0": {}, "1": {} }
+                if (activeGridId === -1) {
+                    activationPermissions = permissions
+                    return
+                }
+                var activeKey = String(activeGridId)
+                var defenderKey = activeKey === "0" ? "1" : "0"
+                if (gridMovesRemaining[activeKey] <= 0) {
+                    activationPermissions = permissions
+                    return
+                }
+                if (!(gridIdleState[activeKey] === true && gridIdleState[defenderKey] === true)) {
+                    activationPermissions = permissions
+                    return
+                }
+                var slots = runtimeSlotsFor(activeGridId)
+                for (var slotKey in slots) {
+                    if (!slots.hasOwnProperty(slotKey)) {
+                        continue
+                    }
+                    var slotState = slots[slotKey]
+                    permissions[activeKey][slotKey] = slotState.ready === true && slotState.deployed === true
+                }
+                activationPermissions = permissions
+                if (topDashboard) {
+                    topDashboard.activationPermissions = activationPermissions["0"] || {}
+                }
+                if (bottomDashboard) {
+                    bottomDashboard.activationPermissions = activationPermissions["1"] || {}
                 }
             }
 
@@ -918,6 +958,7 @@ Item {
                                 gridId: 0
                                 runtimeSlots: ({})
                                 dragPermissions: ({})
+                                activationPermissions: ({})
                                 Connections {
                                     target: topDashboard
                                     function onReadyStateMod(grid, ready, role) {
@@ -1012,6 +1053,7 @@ Item {
                                 gridId: 1
                                 runtimeSlots: ({})
                                 dragPermissions: ({})
+                                activationPermissions: ({})
                                 Connections {
                                     target: bottomDashboard
                                     function onReadyStateMod(grid, ready, role) {

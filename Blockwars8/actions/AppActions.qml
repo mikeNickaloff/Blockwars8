@@ -477,7 +477,7 @@ ActionCreator {
     }
     function modifyBlockHealth(row, column, grid_id, amount) {
         var params = ({
-                          "row": row,
+                          "row": 5 - row,
                           "column": column,
                           "grid_id": grid_id,
                           "amount": amount

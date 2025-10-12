@@ -23,6 +23,7 @@ Item {
     property bool topOrientation: gridId === 0
     property var runtimeSlots: ({})
     property var dragPermissions: ({})
+    property var activationPermissions: ({})
 
     signal readyStateMod(int gridId, bool ready, string role)
     signal dashboardCommand(int gridId, string command, var payload)
@@ -169,6 +170,7 @@ Item {
                     property bool slotReady: runtimeState ? runtimeState.ready === true : false
                     property bool slotDeployed: runtimeState ? runtimeState.deployed === true : false
                     property bool slotDragAllowed: runtimeState && dashboard.dragPermissions && dashboard.dragPermissions[String(index)] === true
+                    property bool slotActivationAllowed: runtimeState && runtimeState.ready === true && runtimeState.deployed === true && dashboard.activationPermissions && dashboard.activationPermissions[String(index)] === true
                     property real energyValue: runtimeState && runtimeState.energy !== undefined ? runtimeState.energy : 0
                     property real maxEnergy: runtimeState && runtimeState.maxEnergy !== undefined ? runtimeState.maxEnergy : (entryData && entryData.energy ? entryData.energy : 0)
                     property real energyFraction: maxEnergy > 0 ? Math.max(0, Math.min(1, energyValue / maxEnergy)) : 0
@@ -191,7 +193,7 @@ Item {
                     Timer {
                         id: flashTimer
                         interval: 600
-                        running: slotReady && slotDragAllowed && !slotDeployed
+                        running: slotReady && (slotDragAllowed || slotActivationAllowed)
                         repeat: true
                         onTriggered: flashOn = !flashOn
                     }
@@ -201,7 +203,7 @@ Item {
                         anchors.fill: parent
                         radius: 12
                         border.width: 1
-                        border.color: slotReady && slotDragAllowed && !slotDeployed ? (flashOn ? Qt.lighter(entryColor, 1.8) : Qt.darker(entryColor, 1.2)) : Qt.darker(entryColor, 1.5)
+                        border.color: slotReady && (slotDragAllowed || slotActivationAllowed) ? (flashOn ? Qt.lighter(entryColor, 1.8) : Qt.darker(entryColor, 1.2)) : Qt.darker(entryColor, 1.5)
                         color: slotDeployed ? "#2a2a38" : Qt.darker(entryColor, 1.8)
                         opacity: slotDeployed ? 0.45 : 1.0
 
@@ -237,7 +239,7 @@ Item {
                             id: dragArea
                             anchors.fill: parent
                             hoverEnabled: true
-                            enabled: slotDragAllowed && !slotDeployed && dashboard.gridId === 1
+                            enabled: slotDragAllowed && !slotActivationAllowed && dashboard.gridId === 1
                             drag.target: dragProxy
                             onPressed: {
                                 if (!enabled)
@@ -273,6 +275,22 @@ Item {
                                                                            "gridTargets": runtimeState && runtimeState.gridTargets ? runtimeState.gridTargets : (entryData && entryData.grid_targets ? entryData.grid_targets : [])
                                                                        })
                                 }
+                            }
+                        }
+
+                        MouseArea {
+                            id: activationArea
+                            anchors.fill: parent
+                            enabled: slotActivationAllowed && dashboard.gridId === 1
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (!enabled) {
+                                    return
+                                }
+                                AppActions.powerupEnergyReset(dashboard.gridId, slotId)
+                                AppActions.activatePowerup(slotId, dashboard.gridId)
                             }
                         }
 
