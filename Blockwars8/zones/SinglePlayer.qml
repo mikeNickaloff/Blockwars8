@@ -524,6 +524,11 @@ Item {
                 return {}
             }
 
+            function runtimeSlotById(gridId, slotId) {
+                var slots = runtimeSlotsFor(gridId)
+                return slots[String(slotId)] || null
+            }
+
             function storeDashboardPowerups(gridId, payload) {
                 var key = gridId === 0 ? "0" : "1"
                 var storedPayload = []
@@ -727,6 +732,136 @@ Item {
                 }
                 if (bottomDashboard) {
                     bottomDashboard.dragPermissions = dragPermissions["1"]
+                }
+            }
+
+            function otherGridId(gridId) {
+                return gridId === 0 ? 1 : 0
+            }
+
+            function extractSelectedCells(targets) {
+                var cells = []
+                if (!targets) {
+                    return cells
+                }
+                if (typeof targets === "string") {
+                    for (var s = 0; s < targets.length; ++s) {
+                        if (targets.charAt(s) === "1") {
+                            var r = Math.floor(s / 6)
+                            var c = s % 6
+                            cells.push({ "row": r, "column": c })
+                        }
+                    }
+                    return cells
+                }
+                for (var i = 0; i < targets.length; ++i) {
+                    var cell = targets[i]
+                    if (cell === undefined || cell === null) {
+                        continue
+                    }
+                    var row = Math.floor(i / 6)
+                    var column = i % 6
+                    var selected = false
+                    if (typeof cell === "boolean") {
+                        selected = cell
+                    } else if (typeof cell === "object") {
+                        if (cell.row !== undefined) {
+                            row = cell.row
+                        }
+                        if (cell.column !== undefined) {
+                            column = cell.column
+                        } else if (cell.col !== undefined) {
+                            column = cell.col
+                        }
+                        if (cell.selected !== undefined) {
+                            selected = cell.selected === true
+                        } else if (cell === true) {
+                            selected = true
+                        }
+                    }
+                    if (selected && row >= 0 && row < 6 && column >= 0 && column < 6) {
+                        cells.push({ "row": row, "column": column })
+                    }
+                }
+                return cells
+            }
+
+            function randomDeployedSlot(gridId) {
+                var slots = runtimeSlotsFor(gridId)
+                var deployed = []
+                for (var key in slots) {
+                    if (!slots.hasOwnProperty(key)) {
+                        continue
+                    }
+                    var slotState = slots[key]
+                    if (slotState.deployed === true && (slotState.health === undefined || slotState.health > 0)) {
+                        deployed.push(slotState)
+                    }
+                }
+                if (deployed.length === 0) {
+                    return null
+                }
+                var index = Math.floor(Math.random() * deployed.length)
+                return deployed[index]
+            }
+
+            function executePowerupAbility(data) {
+                if (!data || data.grid_id === undefined || data.slot_id === undefined || !data.ability) {
+                    return
+                }
+                var ability = data.ability
+                var sourceGrid = data.grid_id
+                var targetKeyRaw = (ability.target || "opponent").toString().toLowerCase()
+                var targetKey = targetKeyRaw
+                if (targetKeyRaw === "ally") {
+                    targetKey = "self"
+                } else if (targetKeyRaw === "enemy") {
+                    targetKey = "opponent"
+                }
+                var abilityType = (ability.type || "blocks").toString().toLowerCase()
+                var amount = ability.amount !== undefined ? ability.amount : 0
+                var abilityColor = ability.color !== undefined ? ability.color : null
+                if (abilityType === "blocks") {
+                    var cells = extractSelectedCells(ability.gridTargets || ability.grid_targets)
+                    if (cells.length === 0 || amount === 0) {
+                        return
+                    }
+                    var targetGrid = targetKey === "self" ? sourceGrid : otherGridId(sourceGrid)
+                    var mode = targetKey === "self" ? "heal" : "damage"
+                    AppActions.applyPowerupBlocksEffect({
+                                                           "grid_id": targetGrid,
+                                                           "source_grid_id": sourceGrid,
+                                                           "slot_id": data.slot_id,
+                                                           "cells": cells,
+                                                           "amount": Math.abs(amount),
+                                                           "mode": mode,
+                                                           "color": abilityColor
+                                                       })
+                } else if (abilityType === "powerup_health" || abilityType === "powerup" || abilityType === "powerup_card_health") {
+                    var targetGridId = targetKey === "self" ? sourceGrid : otherGridId(sourceGrid)
+                    var slotState = randomDeployedSlot(targetGridId)
+                    if (!slotState || amount === 0) {
+                        return
+                    }
+                    var delta = Math.abs(amount)
+                    if (targetKey === "opponent") {
+                        delta = -delta
+                    }
+                    AppActions.applyPowerupCardHealth({
+                                                         "grid_id": targetGridId,
+                                                         "slot_id": slotState.slot,
+                                                         "amount": delta
+                                                     })
+                } else if (abilityType === "health" || abilityType === "player_health") {
+                    if (amount === 0) {
+                        return
+                    }
+                    var targetGridForHealth = targetKey === "self" ? sourceGrid : otherGridId(sourceGrid)
+                    var deltaHealth = Math.abs(amount)
+                    if (targetKey === "opponent") {
+                        deltaHealth = -deltaHealth
+                    }
+                    AppActions.powerupPlayerHealthDelta(targetGridForHealth, deltaHealth, "powerup")
                 }
             }
 
@@ -967,6 +1102,10 @@ Item {
                         }
                         gameHost.dashboardSetFillingEnabled(data.grid_id, true)
                         gameHost.dashboardBeginFilling(data.grid_id, data || ({}))
+                        var key = String(data.grid_id)
+                        var updated = {}
+                        updated[key] = false
+                        gameHost.gridIdleState = Object.assign({}, gameHost.gridIdleState, updated)
                     }
                 }
 
@@ -993,6 +1132,10 @@ Item {
                         gameHost.dashboardSetFillingEnabled(data.grid_id, data.enabled === true)
                         if (data.enabled === true) {
                             gameHost.dashboardBeginFilling(data.grid_id, { "source": "resume" })
+                            var key = String(data.grid_id)
+                            var updated = {}
+                            updated[key] = false
+                            gameHost.gridIdleState = Object.assign({}, gameHost.gridIdleState, updated)
                         }
                     }
                 }
@@ -1061,6 +1204,13 @@ Item {
                             return
                         }
                         gameHost.dashboardActivatePowerup(data.grid_id, data || ({}))
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.executePowerupAbility
+                    onDispatched: function(type, data) {
+                        gameHost.executePowerupAbility(data)
                     }
                 }
 

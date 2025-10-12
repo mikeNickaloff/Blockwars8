@@ -57,6 +57,8 @@ DropArea {
 
     property alias dropProxy: dragTarget
     required property var grid_id
+    property int row: 0
+    property int column: 0
 
 
     width: 64

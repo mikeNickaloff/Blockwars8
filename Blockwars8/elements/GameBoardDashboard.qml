@@ -265,7 +265,12 @@ Item {
                                                                            "row": target.row,
                                                                            "column": target.column,
                                                                            "color": runtimeState ? runtimeState.color : (entryData ? entryData.color : ""),
-                                                                           "displayName": runtimeState && runtimeState.displayName ? runtimeState.displayName : (entryData ? entryData.displayName : "Powerup")
+                                                                           "displayName": runtimeState && runtimeState.displayName ? runtimeState.displayName : (entryData ? entryData.displayName : "Powerup"),
+                                                                           "maxHealth": runtimeState && runtimeState.maxEnergy !== undefined ? runtimeState.maxEnergy : 0,
+                                                                           "amount": runtimeState && runtimeState.amount !== undefined ? runtimeState.amount : 0,
+                                                                           "powerupType": runtimeState && runtimeState.type ? runtimeState.type : (entryData ? entryData.type : "blocks"),
+                                                                           "powerupTarget": runtimeState && runtimeState.target ? runtimeState.target : (entryData ? entryData.target : "opponent"),
+                                                                           "gridTargets": runtimeState && runtimeState.gridTargets ? runtimeState.gridTargets : (entryData && entryData.grid_targets ? entryData.grid_targets : [])
                                                                        })
                                 }
                             }

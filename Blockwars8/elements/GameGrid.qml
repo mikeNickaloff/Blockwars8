@@ -47,6 +47,7 @@ Item {
     property bool pendingCascade: false
     property string pendingCascadeReason: "resume"
     property int pool_index: Math.floor(Math.random() * 1000)
+    property var deployedTiles: ({})
 
     signal gridSettled(var info)
 
@@ -56,6 +57,7 @@ Item {
         for (var i = 0; i < maxIndex; ++i) {
             grid_blocks[i] = null
         }
+        deployedTiles = ({})
     }
 
     onFillDirectionChanged: {
@@ -426,6 +428,11 @@ Item {
             setBlockAt(row, cells[j], null)
         }
         var tileColor = data.color ? resolveBlockColor(data.color) : "#888896"
+        var tileMaxHealth = data.maxHealth !== undefined ? data.maxHealth : 0
+        if (!tileMaxHealth || tileMaxHealth <= 0) {
+            var impliedAmount = data.amount !== undefined ? Math.abs(data.amount) : 0
+            tileMaxHealth = Math.max(1, impliedAmount)
+        }
         var tile = powerupTileComponent.createObject(gridRoot, {
                                                         "x": Qt.binding(function() { return (gridRoot.width / maxColumn) * column; }),
                                                         "y": Qt.binding(function() { return (gridRoot.height / maxRow) * row; }),
@@ -447,8 +454,11 @@ Item {
         tile.row = row
         tile.column = column
         tile.rightColumn = column + 1
+        tile.maxHealth = tileMaxHealth
+        tile.health = tileMaxHealth
         setBlockAt(row, column, tile)
         setBlockAt(row, column + 1, tile)
+        deployedTiles[String(slotId)] = tile
         cleanupBlocks()
         AppActions.confirmPowerupDeployment({
                                                 "grid_id": grid_id,
@@ -462,6 +472,83 @@ Item {
         AppActions.enqueueGridEvent("checkMatches", grid_id, {
                                         "source_event": "powerupPlaced"
                                     })
+    }
+
+    function getBlockHealthObject(row, column) {
+        var blk = getBlock(row, column)
+        if (!blk) {
+            return null
+        }
+        if (isPowerupTile(blk)) {
+            return blk
+        }
+        if (blk.objectName === "Block") {
+            return blk
+        }
+        return null
+    }
+
+    function applyBlocksEffect(effect) {
+        var cells = effect.cells || []
+        var amount = effect.amount !== undefined ? effect.amount : 0
+        if (cells.length === 0 || amount === 0) {
+            return
+        }
+        var mode = effect.mode || "damage"
+        var isHeal = mode === "heal"
+        var processedTiles = {}
+        for (var i = 0; i < cells.length; ++i) {
+            var cell = cells[i]
+            if (!cell) {
+                continue
+            }
+            var row = cell.row
+            var column = cell.column
+            if (!rowWithinBounds(row) || column < 0 || column >= maxColumn) {
+                continue
+            }
+            var obj = getBlockHealthObject(row, column)
+            if (!obj) {
+                continue
+            }
+            if (isPowerupTile(obj)) {
+                var slotKey = String(obj.slotId)
+                if (processedTiles[slotKey]) {
+                    continue
+                }
+                processedTiles[slotKey] = true
+                var delta = isHeal ? amount : -amount
+                AppActions.applyPowerupCardHealth({
+                                                    "grid_id": grid_id,
+                                                    "slot_id": obj.slotId,
+                                                    "amount": delta
+                                                })
+                continue
+            }
+            var currentBlockHealth = obj.block_health !== undefined ? obj.block_health : 0
+            var newBlockHealth = isHeal ? (currentBlockHealth + amount) : (currentBlockHealth - amount)
+            AppActions.modifyBlockHealth(row, column, grid_id, newBlockHealth)
+        }
+    }
+
+    function adjustPowerupCardHealth(data) {
+        var slotId = data.slot_id
+        if (slotId === undefined || slotId === null) {
+            return
+        }
+        var tile = deployedTiles[String(slotId)]
+        if (!tile) {
+            return
+        }
+        var delta = data.amount !== undefined ? data.amount : 0
+        if (delta === 0) {
+            return
+        }
+        var updatedHealth = tile.health + delta
+        if (tile.maxHealth && tile.maxHealth > 0 && updatedHealth > tile.maxHealth) {
+            updatedHealth = tile.maxHealth
+        }
+        tile.health = Math.max(0, updatedHealth)
     }
 
     function processMatchStep() {
@@ -582,7 +669,7 @@ Item {
             grid_blocks[idx] = null
             return true
         }
-        if (blk.objectName !== "Block") {
+        if (blk.objectName !== "Block" && !isPowerupTile(blk)) {
             return true
         }
         return false
@@ -880,6 +967,26 @@ Item {
             filter: ActionTypes.deployPowerupRequest
             onDispatched: function(dtype, data) {
                 handlePowerupDeployment(data)
+            }
+        }
+
+        AppListener {
+            filter: ActionTypes.applyPowerupBlocksEffect
+            onDispatched: function(dtype, data) {
+                if (!data || data.grid_id !== grid_id) {
+                    return
+                }
+                applyBlocksEffect(data)
+            }
+        }
+
+        AppListener {
+            filter: ActionTypes.applyPowerupCardHealth
+            onDispatched: function(dtype, data) {
+                if (!data || data.grid_id !== grid_id) {
+                    return
+                }
+                adjustPowerupCardHealth(data)
             }
         }
 
@@ -1200,6 +1307,9 @@ Item {
                     }
                 }
                 if (keepDueToIncoming) {
+                    continue
+                }
+                if (isPowerupTile(child)) {
                     continue
                 }
                 if (grid_blocks.indexOf(child) === -1) {

@@ -119,6 +119,9 @@ due to existing industry standards already in existence for a particular feature
 40. When a Powerup card reaches 100% of its required energy, its border flashes on a slow interval to indicate it is fully charged; while flashing it no longer accumulates additional energy until the player activates that powerup.
 41. When the active player still has swaps remaining, both grids are idle, and at least one of their four powerup cards is fully charged, that player may drag a charged card from the Powerup HUD onto any empty-friendly cell (never onto the opponent's grid) to deploy the powerup instead of performing a swap.
 42. Dropping a powerup onto the board replaces the two horizontal blocks beneath it with the powerup entity; those cells are no longer considered matchable blocks for the purposes of the match-3 rules.
+43. Each powerup card may be dragged onto its owner's grid at most once per game; up to four powerups can be deployed sequentially provided no cascades are active, the player still has swaps remaining, and no other powerup ability is firing.
+44. Deploying a powerup card immediately resolves its ability using the stored powerup data (target owner, affected type, HP adjustments, and block selection); block targets either lose or gain health (including deployed powerup cards) according to the ability's color/amount and target rules.
+45. After a powerup ability fires, that card's energy resets to 0 and must be recharged through matches, but the deployed powerup tile remains on the grid permanently.
 
 ##### Game Grid / Game Board / (Human/CPU/Network) Player interaction
 43. When one of the players receives the signal to queue a command, it will send a signal back with the UUID stating that the signal has been received and queued. 

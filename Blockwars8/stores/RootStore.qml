@@ -227,6 +227,10 @@ Store {
         "0": { "grid_id": 0, "slots": {} },
         "1": { "grid_id": 1, "slots": {} }
     }
+    property var player_health: {
+        "0": 2000,
+        "1": 2000
+    }
 
     Component.onCompleted: {
         loadPowerupData()
@@ -545,7 +549,12 @@ Store {
                 "color": "red",
                 "deployed": false,
                 "displayName": "Powerup",
-                "gridTargets": []
+                "gridTargets": [],
+                "amount": 0,
+                "type": "blocks",
+                "target": "opponent",
+                "position": null,
+                "health": 0
             }
         }
         return gridState.slots[slotKey]
@@ -571,10 +580,14 @@ Store {
             slotState.gridTargets = p.grid_targets || []
             slotState.type = p.type || "blocks"
             slotState.target = p.target || "opponent"
+            slotState.amount = p.amount !== undefined ? p.amount : 0
             if (slotState.energy > slotState.maxEnergy) {
                 slotState.energy = slotState.maxEnergy
             }
             slotState.ready = slotState.energy >= slotState.maxEnergy
+            if (slotState.deployed !== true) {
+                slotState.position = null
+            }
             slotsObj[String(slotId)] = slotState
         }
         gridState.slots = slotsObj
@@ -675,6 +688,14 @@ Store {
     function prepareSinglePlayerDashboards() {
         var cpuPowerups = collectCpuDashboardPowerups()
         var playerPowerups = collectDashboardPowerupsFromSelections()
+        powerup_runtime_state = {
+            "0": { "grid_id": 0, "slots": {} },
+            "1": { "grid_id": 1, "slots": {} }
+        }
+        player_health = {
+            "0": 2000,
+            "1": 2000
+        }
         single_player_dashboard_data = {
             "0": {
                 "grid_id": 0,
@@ -834,9 +855,55 @@ Store {
             slotState.deployed = true
             slotState.energy = 0
             slotState.ready = false
+            slotState.position = {
+                "row": data.row !== undefined ? data.row : -1,
+                "column": data.column !== undefined ? data.column : -1
+            }
+            if (!slotState.maxEnergy || slotState.maxEnergy <= 0) {
+                slotState.maxEnergy = Math.max(1, slotState.amount)
+            }
+            slotState.health = slotState.maxEnergy
             powerup_runtime_state[String(data.grid_id)].slots[String(data.slot_id)] = slotState
             publishRuntimeState()
         }
     }
-}
 
+    AppListener {
+        filter: "applyPowerupCardHealth"
+        onDispatched: function(type, data) {
+            if (!data || data.grid_id === undefined || data.slot_id === undefined || data.amount === undefined) {
+                return
+            }
+            ensureRuntimeInitialized()
+            var slotState = runtimeSlotState(data.grid_id, data.slot_id)
+            if (!slotState.deployed) {
+                return
+            }
+            var newHealth = slotState.health !== undefined ? slotState.health + data.amount : data.amount
+            if (slotState.maxEnergy && slotState.maxEnergy > 0) {
+                if (newHealth > slotState.maxEnergy) {
+                    newHealth = slotState.maxEnergy
+                }
+            }
+            slotState.health = Math.max(0, newHealth)
+            powerup_runtime_state[String(data.grid_id)].slots[String(data.slot_id)] = slotState
+            publishRuntimeState()
+        }
+    }
+
+    AppListener {
+        filter: "powerupPlayerHealthDelta"
+        onDispatched: function(type, data) {
+            if (!data || data.grid_id === undefined || data.amount === undefined) {
+                return
+            }
+            var key = String(data.grid_id)
+            var current = player_health[key] !== undefined ? player_health[key] : 0
+            var updated = current + data.amount
+            if (updated < 0) {
+                updated = 0
+            }
+            player_health = Object.assign({}, player_health, { [key]: updated })
+        }
+    }
+}

@@ -3,6 +3,7 @@
 import QtQuick 2.0
 import QuickFlux 1.1
 import "../components" 1.0
+import "../stores" 1.0
 
 
 ActionCreator {
@@ -154,6 +155,50 @@ ActionCreator {
             }
         }
         AppDispatcher.dispatch(ActionTypes.deployPowerupApplied, payload)
+    }
+
+    function executePowerupAbility(params) {
+        var payload = {}
+        if (params) {
+            for (var key in params) {
+                if (params.hasOwnProperty(key)) {
+                    payload[key] = params[key]
+                }
+            }
+        }
+        AppDispatcher.dispatch(ActionTypes.executePowerupAbility, payload)
+    }
+
+    function applyPowerupBlocksEffect(params) {
+        var payload = {}
+        if (params) {
+            for (var key in params) {
+                if (params.hasOwnProperty(key)) {
+                    payload[key] = params[key]
+                }
+            }
+        }
+        AppDispatcher.dispatch(ActionTypes.applyPowerupBlocksEffect, payload)
+    }
+
+    function applyPowerupCardHealth(params) {
+        var payload = {}
+        if (params) {
+            for (var key in params) {
+                if (params.hasOwnProperty(key)) {
+                    payload[key] = params[key]
+                }
+            }
+        }
+        AppDispatcher.dispatch(ActionTypes.applyPowerupCardHealth, payload)
+    }
+
+    function powerupPlayerHealthDelta(grid_id, amount, reason) {
+        AppDispatcher.dispatch(ActionTypes.powerupPlayerHealthDelta, {
+                                   "grid_id": grid_id,
+                                   "amount": amount,
+                                   "reason": reason
+                               })
     }
 
     // sent from players immediately upon making a swap, however it will not be executed on the remote client's
@@ -412,75 +457,23 @@ ActionCreator {
     }
 
     function activatePowerup(slot_id, grid_id) {
-        var powerupArray = []
         console.log("Activating powerup", slot_id, grid_id)
-        AppDispatcher.dispatch(ActionTypes.activatePowerup, {
-                                   "slot_id": slot_id,
-                                   "grid_id": grid_id
-                               })
-        if (grid_id == 0) {
-            powerupArray = MainStore.my_powerup_data
+        var runtime = MainStore.powerup_runtime_state || {}
+        var gridState = runtime[String(grid_id)]
+        if (!gridState || !gridState.slots) {
+            return
         }
-        if (grid_id == 1) {
-            powerupArray = MainStore.enemy_powerup_data
+        var slotState = gridState.slots[String(slot_id)]
+        if (!slotState) {
+            return
         }
-        console.log("Poweup Data", JSON.stringify(powerupArray))
-        var powerupType = getPowerupProperty(powerupArray, slot_id,
-                                             grid_id, "type")
-        var powerupTarget = getPowerupProperty(powerupArray, slot_id,
-                                               grid_id, "target")
-        var _powerupAmount = getPowerupProperty(powerupArray, slot_id,
-                                                grid_id, "amount")
-        var powerupAmount = 0
-        var powerupEnergy = getPowerupProperty(powerupArray, slot_id,
-                                               grid_id, "energy")
-        var target_grid_id = powerupTarget
-        console.log(powerupType, powerupTarget, _powerupAmount, powerupEnergy)
-        if (powerupTarget == "self") {
-            powerupAmount = Math.abs(_powerupAmount)
-            target_grid_id = grid_id
+        var payload = {
+            "slot_id": slot_id,
+            "grid_id": grid_id,
+            "ability": JSON.parse(JSON.stringify(slotState))
         }
-        if (powerupTarget == "opponent") {
-            powerupAmount = 0 - Math.abs(_powerupAmount)
-            if (grid_id == 0) {
-                target_grid_id = 1
-            } else {
-                target_grid_id = 0
-            }
-        }
-        if (powerupType == "blocks") {
-            var powerupGrid = getPowerupProperty(powerupArray, slot_id,
-                                                 grid_id, "grid")
-            for (var a = 0; a < 6; a++) {
-
-                for (var b = 0; b < 6; b++) {
-                    var idx = (a * 6) + b
-                    if (powerupGrid[idx] == true) {
-
-                        if (powerupTarget == "self")
-                            console.log("Modify blockhealth", target_grid_id,
-                                        a, b, powerupAmount)
-                        AppActions.modifyBlockHealth(a, b, target_grid_id,
-                                                     powerupAmount)
-                    }
-                }
-            }
-        }
-        if (powerupType == "heros") {
-
-        }
-        if (powerupType == "health") {
-
-        }
-    }
-    function getPowerupProperty(powerupArray, slot_id, grid_id, powerupProperty) {
-        for (var i = 0; i < powerupArray.length; ++i) {
-            var powerupObject = powerupArray[i]
-            if (i == slot_id) {
-                return powerupObject[powerupProperty]
-            }
-        }
-        return null
+        AppDispatcher.dispatch(ActionTypes.activatePowerup, payload)
+        executePowerupAbility(payload)
     }
     function modifyBlockHealth(row, column, grid_id, amount) {
         var params = ({
