@@ -1,0 +1,52 @@
+/home/mike/build/BlockWars6/images/blueExp/blue1.png	0	0	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue10.png	0	0	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue11.png	0	0	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue12.png	0	0	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue13.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue14.png	0	0	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue15.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue16.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue17.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue18.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue19.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue2.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue20.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue21.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue22.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue23.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue24.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue25.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue26.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue27.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue28.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue29.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue3.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue30.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue31.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue32.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue33.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue34.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue35.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue36.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue37.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue38.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue39.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue4.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue40.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue41.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue42.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue43.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue44.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue45.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue46.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue5.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue6.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue7.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue8.png	-27563.8	171.066	1	1	0	0	0
+/home/mike/build/BlockWars6/images/blueExp/blue9.png	-27563.8	171.066	1	1	0	0	0
+5	10	5	255	255	255	2	1	1
+298	152	1	498	152
+296	283	1	298	153
+295	287	1	493	288
+493	152	0	0	0
+500	160	1	496	289

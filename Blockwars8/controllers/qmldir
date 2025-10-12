@@ -1,0 +1,6 @@
+module controllers
+GridController 1.0 GridController.qml
+NetworkController 1.0 NetworkController.qml
+GameController 1.0 GameController.qml
+TurnController 1.0 TurnController.qml
+CpuController 1.0 CpuController.qml
