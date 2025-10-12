@@ -15,7 +15,18 @@ due to existing industry standards already in existence for a particular feature
 
 ## Play-by-Play
 
-Follow the order from first to last when programming so as to have all dependencies created and available before generating code that depends on them.
+### Instructions for handling Play-by-Plays:
+ A. Carefully read every detail from the play-by-play # you wish to implement
+ B. Design a plan which contains which files must be added onto or modified in order to achieve all details for that number
+ C. Once the plan is established, create a verbal summary of the changes you wish to make (files and description of code changes) in 1-3 sentences per file)
+ D. First show the play-by-play # you are working on, followed by asking user (me) to approve each of the changes by showing a number and description for each file change to happen.
+ E. For each approved set of changes, ensure that those changes are accurately reflected on the AGENTS.md play-by-play list if they deviate from the existing text by requesting for approval of change to AGENTS.md play-by-play #XX and showing what the new text for that will be once changed.
+ F. If anything is not approved, please provide reasoning for that specific change and give 1 or 2 suggested alternatives for that which would still achieve the desired effect. 
+ G. If the user approves one of the suggestions, make sure to update the AGENTS.md file play-by-play # with the new functionality and then implement the changes discusssed once everything is approved
+ H. If user does not approve any suggestions, then ask for user to provide implementation details for that action and then follow the same procedure of approving the new changes and update the AGENTS.md with the new functionality when applicable. 
+ I. Only do one play-by-play at a time, and skip any that are fully implemented already.
+
+### Play-by-play items
 
 ### Main Menu (title screen)
 1. The application opens revealing a Screen with the title Block Wars on the top 20% of the screen, centered on the X axis with the application
@@ -90,7 +101,7 @@ Follow the order from first to last when programming so as to have all dependenc
 27. The Dashboard for the Player's cards are populated once the signal is received
 28. Each Dashboard emits their own signal stating that "Powerups are Loaded" once they have fully parsed the JSON data and made it visible in alll four Powerup card slots. This signal should include the Dashboard # aand the Command "PowerDataLoaded". 
 29. When the Game Grid receives the "PowerupDataLoaded" signal, it updates one of two hard coded properties:  powerupsLoaded0 and powerupsLoaded1 depending on Dashboard # it will set one of those to true.  By default both powerupsLoadedX properties of Game Board should be false.
-30. Game Board should have an onPowerupsLoaded0Chaged eventtwo empty grids with light grey borders listener that will run the function "checkForAllPowerupsLoaded" which will check to see if both powerpsLoadedX variables are now true, and if yes then send the signal "SetSeed" twice -- once for Dashboard 0 and once for Dashboad 1 
+30. After both dashboards emit PowerDataLoaded, the Game Board generates independent seeds (1–500) for each dashboard, applies them through each dashboard’s setSeed helper, and waits for the dashboards to acknowledge by emitting an indexSet command with the selected seed.
     with a random number between 1 and 500 which will define the index with which  block colors are chosen from out of a predefined pool of blocks included in a resource file loaded on startup and stored as a context property to allow quick and global access. The pool is a large dictionary of { <index>: <color> } pairs that pulls the block at an index each time a new block is needed
 		so that blocks will have deterministic ordering every time to avoid issues with desyncing blocks and cheating and to minimize network traffic.  
 31. Once each Dashboard gets the signal to set their pool index, the Dashboard sends a signal with Dashboard #, command "indexSet".
@@ -102,37 +113,41 @@ Follow the order from first to last when programming so as to have all dependenc
 36. Game Board wills send the chooseRandomNumber signal which will be received by both players, and each player (whether CPU, human, or network player) will respond to that signal with a random number between 1 and 5000000. 
     The player with the highest number response is first. If both players have the same number, another signal is sent out.  The player's responses are in the form of a signal "randomNumberChoice" which will have the Dashboard # and the number as arguments and be handled by a function on GameBoard that checks to see if two properties are set and
 		compares them once they are both not -1 (the default). Property names are randomNumber0 and randomNumber1.
-37. Both players will be sent the signal "setFillingEnabled" true and "setLaunchOnMatchEnabled" to false for both players, and both players will get the signal "beginFilling" enqueued using the system i will explain next.
+37. At the start of each turn, the active dashboard receives "setFillingEnabled" true and "setLaunchOnMatchEnabled" true (plus a fresh "beginFilling" command), while the defending dashboard is told "setFillingEnabled" false and "setLaunchOnMatchEnabled" false so its blocks remain frozen until the attacker finishes cascading.
 38. GameBoard will have a queue system where every command will need to be enqueued and sent in order to both players, each command having a UUID generated.
+39. Launching blocks of any color will add energy to the attacker's powerup cards that share the launched block color equal to the launched block's HP; fully destroyed defender blocks also donate their remaining HP as energy to any of the attacker's powerups matching the destroyed block colors. (Example: launching three red blocks with 5 HP each that destroy two green blocks and one yellow block—each 5 HP—grants +15 red energy, +10 green energy, and +5 yellow energy to the corresponding powerup cards.)
+40. When a Powerup card reaches 100% of its required energy, its border flashes on a slow interval to indicate it is fully charged; while flashing it no longer accumulates additional energy until the player activates that powerup.
+41. When the active player still has swaps remaining, both grids are idle, and at least one of their four powerup cards is fully charged, that player may drag a charged card from the Powerup HUD onto any empty-friendly cell (never onto the opponent's grid) to deploy the powerup instead of performing a swap.
+42. Dropping a powerup onto the board replaces the two horizontal blocks beneath it with the powerup entity; those cells are no longer considered matchable blocks for the purposes of the match-3 rules.
 
 ##### Game Grid / Game Board / (Human/CPU/Network) Player interaction
-39. When one of the players receives the signal to queue a command, it will send a signal back with the UUID stating that the signal has been received and queued. 
-40. Game Board will track via multi-dimensional array of queue objects that contains UUID and whether or not each player has ACK'd the queue object and whether or not each Player has executed the command given (which will be executed in order one event at a time and then an EXEC signal willl be sent as that queued event completes from the Player instance)
-41. Once an event in the queue has been ACK'd, the Game Board is free to enqueue / proceed to the next event in the game play for certain commands, while others will require that the Player has executed the entire command before queueing another event. 
-42. Events like setFillingEnabled, turnEnded, etc all have various different timing requirements and must fully execute in order to prevent issues with Multiplayer "Network Players" who will have latency as a constant factor and trouble spot for synchronization failures
-43. Once both Players have successfully executed beginFilling, then GameBoard will send a different signal the Dashboard which will instruct it to "BeginFilling" or "setLaunchOnMatchEnabled" etc along with the Dashboard #
-44. There must be an association between the Player instance and the Dashboad in order to properly keep the games in sync and the messages to the right places. The two objects are separate, but must work together with the Game Board and stay coordinated across all for both players but cannot be simultanous, they must communicate in specific order when it comes to high level commands.
-45. When a Dashboard gets a signal to "beginFilling" it will first drop any blocks already in the grid all the way to the side closest to the center of the entire Application window (GameBoard) -- for the Top Dashboard that would be the lowest cells on the Game Grid, for the bottom Dashboard that would be the top cells on the Game Grid. 
-46. Blocks can only have one block per cell in the 6x6 Game Grid which each Dashboard has. Once all blocks have completely filled in the Game Grid so that no floating gaps exist between the end of the grid closest to the other player and all blocks currently on that Game Grid, then by going one row at a time, from left to right, one block at a time, create a new block by increasing (or resetting to 0 when at max) the POOL index for this Dashboard and then grabbing the color at the new index
+43. When one of the players receives the signal to queue a command, it will send a signal back with the UUID stating that the signal has been received and queued. 
+44. Game Board will track via multi-dimensional array of queue objects that contains UUID and whether or not each player has ACK'd the queue object and whether or not each Player has executed the command given (which will be executed in order one event at a time and then an EXEC signal willl be sent as that queued event completes from the Player instance)
+45. Once an event in the queue has been ACK'd, the Game Board is free to enqueue / proceed to the next event in the game play for certain commands, while others will require that the Player has executed the entire command before queueing another event. 
+46. Events like setFillingEnabled, turnEnded, etc all have various different timing requirements and must fully execute in order to prevent issues with Multiplayer "Network Players" who will have latency as a constant factor and trouble spot for synchronization failures
+47. Once both Players have successfully executed beginFilling, then GameBoard will send a different signal the Dashboard which will instruct it to "BeginFilling" or "setLaunchOnMatchEnabled" etc along with the Dashboard #
+48. There must be an association between the Player instance and the Dashboad in order to properly keep the games in sync and the messages to the right places. The two objects are separate, but must work together with the Game Board and stay coordinated across all for both players but cannot be simultanous, they must communicate in specific order when it comes to high level commands.
+49. When a Dashboard gets a signal to "beginFilling" it will first drop any blocks already in the grid all the way to the side closest to the center of the entire Application window (GameBoard) -- for the Top Dashboard that would be the lowest cells on the Game Grid, for the bottom Dashboard that would be the top cells on the Game Grid. 
+50. Blocks can only have one block per cell in the 6x6 Game Grid which each Dashboard has. Once all blocks have completely filled in the Game Grid so that no floating gaps exist between the end of the grid closest to the other player and all blocks currently on that Game Grid, then by going one row at a time, from left to right, one block at a time, create a new block by increasing (or resetting to 0 when at max) the POOL index for this Dashboard and then grabbing the color at the new index
     and instantiated a new Block.qml instance one cell bbefore the closest cell to the "player health" (we will call this cell -1) and it will be positioned in the current column being iterated. When blocks have been created in each column which still has an empty space, then the GameGrid will internally execute the "compressBlocks" function which sets the block's Y position to be at the target cell it will end up being when compressed.
 		
 ##### Blocks
-47. Blocks have Behavior attachments that will control their animations that execute "processAnimation" functions which determine the block's state (matched, powering up, taking damage, colliding, launching, airborn, exploding, filling, waiting, or dead, maybe others later?) and load sprite sheets depending on what action they are doing.
-48. Spritesheets exist already which show blocks powering up for launch and transforming into projectiles so that they can load one spritesheet for the entire process of matching, launching, airborn,and colliding.  exploding is a separate animation that uses particles which have to be fed to a ParticleSystem overlay via signals and clever mapping of positions. an example Block.qml is included in this file for reference from an older version of the same game.
-49. Blocks also must detect mouse events for switching when enabled, so they must be updated as to whether they are allowed to be interacted wth or not by the Game Grid
+51. Blocks have Behavior attachments that will control their animations that execute "processAnimation" functions which determine the block's state (matched, powering up, taking damage, colliding, launching, airborn, exploding, filling, waiting, or dead, maybe others later?) and load sprite sheets depending on what action they are doing.
+52. Spritesheets exist already which show blocks powering up for launch and transforming into projectiles so that they can load one spritesheet for the entire process of matching, launching, airborn,and colliding.  exploding is a separate animation that uses particles which have to be fed to a ParticleSystem overlay via signals and clever mapping of positions. an example Block.qml is included in this file for reference from an older version of the same game.
+53. Blocks also must detect mouse events for switching when enabled, so they must be updated as to whether they are allowed to be interacted wth or not by the Game Grid
 
 ##### Game Board
-50. Once the BeginFilling signal has been received by the GameGrid, then it will change the GameGrid's current state to "fill". 
-51. Whenever the GameGrid's state changes into "fill", it will activate the "fillTimer"
-52. The fillTimer's job is to periodically check to see if Row 0 has any cells which are null or undefined in the array that stores the Block instances for the GameGrid.
-53. When a column in row 0 has an empty or undefined position, create a new Block instance at position Row -1 in the column that was checked. 
-54. Once all columns have been checked and all columns with empty cells in row 0 have been identified and a new Block spawned, set all Block instances in row -1 to be in row 0 (which should update their y value as well to initiate the animation)
+54. Once the BeginFilling signal has been received by the GameGrid, then it will change the GameGrid's current state to "fill". 
+55. Whenever the GameGrid's state changes into "fill", it will activate the "fillTimer"
+56. The fillTimer's job is to periodically check to see if Row 0 has any cells which are null or undefined in the array that stores the Block instances for the GameGrid.
+57. When a column in row 0 has an empty or undefined position, create a new Block instance at position Row -1 in the column that was checked. 
+58. Once all columns have been checked and all columns with empty cells in row 0 have been identified and a new Block spawned, set all Block instances in row -1 to be in row 0 (which should update their y value as well to initiate the animation)
 
 ##### Block
-55. Block should have a Behavior on y { SequentialAnimation } Behavior which executes a ScriptAction { } first that sets the "inAnimation" property to true for the Block instance and a ScriptAction { } after the NumberAnimation {} which sets the inAnimation to false.
+59. Block should have a Behavior on y { SequentialAnimation } Behavior which executes a ScriptAction { } first that sets the "inAnimation" property to true for the Block instance and a ScriptAction { } after the NumberAnimation {} which sets the inAnimation to false.
 
 ##### Game Board
-56. Whenever fillTimer should also have an early exit condition where it checks all Block instances for this GameGrid instance to see if any of them have "inAnimation" set to true
+60. Whenever fillTimer should also have an early exit condition where it checks all Block instances for this GameGrid instance to see if any of them have "inAnimation" set to true
 57. If any Blocks have inAnimation which are set to true, then return and do not continue to process until all Blocks which are not null have inAnimation set to false.
 58. Once All Block instances for GameGrid have inAnimaton == false, change this GameGrid's state to "compact"
 59. Compact mode will activate the "compactTimer" which checks for any blocks with inAnimaton == true and returns if  it finds any, othewise it will check each column for each row starting at the 5th row and then check to see if the 6th row in that same column has a Block or if it is null/unidefined.
@@ -1200,4 +1215,3 @@ Item {
 				shape: RectangleShape {}
 				}
 }
-

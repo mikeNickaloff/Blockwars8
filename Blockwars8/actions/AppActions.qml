@@ -93,6 +93,69 @@ ActionCreator {
                                })
     }
 
+    function setFillingEnabled(grid_id, enabled) {
+        AppDispatcher.dispatch(ActionTypes.setFillingEnabled, {
+                                   "grid_id": grid_id,
+                                   "enabled": enabled === true
+                               })
+    }
+
+    function setLaunchOnMatchEnabled(grid_id, enabled) {
+        AppDispatcher.dispatch(ActionTypes.setLaunchOnMatchEnabled, {
+                                   "grid_id": grid_id,
+                                   "enabled": enabled === true
+                               })
+    }
+
+    function powerupEnergyDelta(grid_id, slot_id, color, amount, reason) {
+        AppDispatcher.dispatch(ActionTypes.powerupEnergyDelta, {
+                                   "grid_id": grid_id,
+                                   "slot_id": slot_id,
+                                   "color": color,
+                                   "amount": amount,
+                                   "reason": reason
+                               })
+    }
+
+    function powerupEnergyReset(grid_id, slot_id) {
+        AppDispatcher.dispatch(ActionTypes.powerupEnergyReset, {
+                                   "grid_id": grid_id,
+                                   "slot_id": slot_id
+                               })
+    }
+
+    function powerupReadyState(grid_id, slot_id, ready) {
+        AppDispatcher.dispatch(ActionTypes.powerupReadyState, {
+                                   "grid_id": grid_id,
+                                   "slot_id": slot_id,
+                                   "ready": ready === true
+                               })
+    }
+
+    function requestPowerupDeployment(params) {
+        var payload = {}
+        if (params) {
+            for (var key in params) {
+                if (params.hasOwnProperty(key)) {
+                    payload[key] = params[key]
+                }
+            }
+        }
+        AppDispatcher.dispatch(ActionTypes.deployPowerupRequest, payload)
+    }
+
+    function confirmPowerupDeployment(params) {
+        var payload = {}
+        if (params) {
+            for (var key in params) {
+                if (params.hasOwnProperty(key)) {
+                    payload[key] = params[key]
+                }
+            }
+        }
+        AppDispatcher.dispatch(ActionTypes.deployPowerupApplied, payload)
+    }
+
     // sent from players immediately upon making a swap, however it will not be executed on the remote client's
     //  game until their game has completed the grid events and is idle.
     //  this small requirement essentially will avoid any desync from happening as far as game timing, and will
@@ -351,6 +414,10 @@ ActionCreator {
     function activatePowerup(slot_id, grid_id) {
         var powerupArray = []
         console.log("Activating powerup", slot_id, grid_id)
+        AppDispatcher.dispatch(ActionTypes.activatePowerup, {
+                                   "slot_id": slot_id,
+                                   "grid_id": grid_id
+                               })
         if (grid_id == 0) {
             powerupArray = MainStore.my_powerup_data
         }

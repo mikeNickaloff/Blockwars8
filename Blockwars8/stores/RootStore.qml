@@ -223,6 +223,10 @@ Store {
         "0": false,
         "1": false
     }
+    property var powerup_runtime_state: {
+        "0": { "grid_id": 0, "slots": {} },
+        "1": { "grid_id": 1, "slots": {} }
+    }
 
     Component.onCompleted: {
         loadPowerupData()
@@ -525,6 +529,75 @@ Store {
         return result
     }
 
+    function runtimeSlotState(gridId, slotId) {
+        var gridKey = String(gridId)
+        if (!powerup_runtime_state.hasOwnProperty(gridKey)) {
+            powerup_runtime_state[gridKey] = { "grid_id": gridId, "slots": {} }
+        }
+        var gridState = powerup_runtime_state[gridKey]
+        var slotKey = String(slotId)
+        if (!gridState.slots.hasOwnProperty(slotKey)) {
+            gridState.slots[slotKey] = {
+                "slot": slotId,
+                "energy": 0,
+                "maxEnergy": 0,
+                "ready": false,
+                "color": "red",
+                "deployed": false,
+                "displayName": "Powerup",
+                "gridTargets": []
+            }
+        }
+        return gridState.slots[slotKey]
+    }
+
+    function updateRuntimePowerups(gridId) {
+        var selections = gridId === 0 ? collectCpuDashboardPowerups() : collectDashboardPowerupsFromSelections()
+        var gridKey = String(gridId)
+        if (!powerup_runtime_state.hasOwnProperty(gridKey)) {
+            powerup_runtime_state[gridKey] = { "grid_id": gridId, "slots": {} }
+        }
+        var gridState = powerup_runtime_state[gridKey]
+        var slotsObj = {}
+        for (var i = 0; i < selections.length; ++i) {
+            var p = selections[i]
+            var slotId = p.slot !== undefined ? p.slot : i
+            var slotState = runtimeSlotState(gridId, slotId)
+            slotState.grid_id = gridId
+            slotState.slot = slotId
+            slotState.displayName = p.displayName || (p.source === "default" ? ("Default Powerup " + (slotId + 1)) : ("Custom Powerup " + (slotId + 1)))
+            slotState.color = p.color || "red"
+            slotState.maxEnergy = p.energy !== undefined ? p.energy : 100
+            slotState.gridTargets = p.grid_targets || []
+            slotState.type = p.type || "blocks"
+            slotState.target = p.target || "opponent"
+            if (slotState.energy > slotState.maxEnergy) {
+                slotState.energy = slotState.maxEnergy
+            }
+            slotState.ready = slotState.energy >= slotState.maxEnergy
+            slotsObj[String(slotId)] = slotState
+        }
+        gridState.slots = slotsObj
+        powerup_runtime_state[gridKey] = gridState
+        publishRuntimeState()
+    }
+
+    function ensureRuntimeInitialized() {
+        updateRuntimePowerups(0)
+        updateRuntimePowerups(1)
+    }
+
+    function publishRuntimeState() {
+        var clone = {}
+        for (var key in powerup_runtime_state) {
+            if (!powerup_runtime_state.hasOwnProperty(key)) {
+                continue
+            }
+            clone[key] = JSON.parse(JSON.stringify(powerup_runtime_state[key]))
+        }
+        powerup_runtime_state = clone
+    }
+
     function loadDefaultPowerups() {
         var seeds = [
             { "slot": 0, "target": "opponent", "type": "blocks", "color": "red", "amount": 5, "grid_targets": [[0, 1, true], [0, 2, true], [0, 3, true]], "displayName": "Fire Line" },
@@ -618,6 +691,8 @@ Store {
             "0": false,
             "1": false
         }
+        updateRuntimePowerups(0)
+        updateRuntimePowerups(1)
     }
 
     AppListener {
@@ -660,6 +735,7 @@ Store {
         onDispatched: function (type, message) {
             single_player_selection_ready = true
             prepareSinglePlayerDashboards()
+            updateRuntimePowerups(1)
         }
     }
 
@@ -676,6 +752,91 @@ Store {
             }
             updated[gridKey] = true
             single_player_dashboard_ready = updated
+            updateRuntimePowerups(message.grid_id)
+        }
+    }
+
+    AppListener {
+        filter: "powerupEnergyDelta"
+        onDispatched: function(type, data) {
+            if (!data || data.grid_id === undefined || data.slot_id === undefined) {
+                return
+            }
+            ensureRuntimeInitialized()
+            var amount = data.amount !== undefined ? data.amount : 0
+            if (amount === 0) {
+                return
+            }
+            var colorFilter = data.color ? ("" + data.color).toLowerCase() : null
+            var gridKey = String(data.grid_id)
+            var slots = powerup_runtime_state[gridKey] ? powerup_runtime_state[gridKey].slots : {}
+            var targetSlots = []
+            if (data.slot_id !== undefined && data.slot_id !== null && data.slot_id >= 0) {
+                targetSlots.push(runtimeSlotState(data.grid_id, data.slot_id))
+            } else {
+                for (var slotKey in slots) {
+                    if (!slots.hasOwnProperty(slotKey)) {
+                        continue
+                    }
+                    targetSlots.push(slots[slotKey])
+                }
+            }
+            for (var i = 0; i < targetSlots.length; ++i) {
+                var slotState = targetSlots[i]
+                if (!slotState) {
+                    continue
+                }
+                if (slotState.deployed) {
+                    continue
+                }
+                if (colorFilter && slotState.color && slotState.color.toLowerCase() !== colorFilter) {
+                    continue
+                }
+                var previousReady = slotState.ready
+                slotState.energy = Math.max(0, Math.min(slotState.energy + amount, slotState.maxEnergy))
+                slotState.ready = slotState.energy >= slotState.maxEnergy
+                powerup_runtime_state[gridKey].slots[String(slotState.slot)] = slotState
+                if (slotState.ready && !previousReady) {
+                    // ready flag will be observed via runtime state publication
+                }
+            }
+            publishRuntimeState()
+        }
+    }
+
+    AppListener {
+        filter: "powerupEnergyReset"
+        onDispatched: function(type, data) {
+            if (!data || data.grid_id === undefined || data.slot_id === undefined) {
+                return
+            }
+            ensureRuntimeInitialized()
+            var slotState = runtimeSlotState(data.grid_id, data.slot_id)
+            slotState.energy = 0
+            slotState.ready = false
+            powerup_runtime_state[String(data.grid_id)].slots[String(data.slot_id)] = slotState
+            publishRuntimeState()
+        }
+    }
+
+    AppListener {
+        filter: "deployPowerupApplied"
+        onDispatched: function(type, data) {
+            if (!data || data.grid_id === undefined || data.slot_id === undefined) {
+                return
+            }
+            if (data.success === false) {
+                publishRuntimeState()
+                return
+            }
+            ensureRuntimeInitialized()
+            var slotState = runtimeSlotState(data.grid_id, data.slot_id)
+            slotState.deployed = true
+            slotState.energy = 0
+            slotState.ready = false
+            powerup_runtime_state[String(data.grid_id)].slots[String(data.slot_id)] = slotState
+            publishRuntimeState()
         }
     }
 }
+

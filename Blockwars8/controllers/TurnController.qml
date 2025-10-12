@@ -67,6 +67,11 @@ Item {
 
         AppActions.enableBlocks(gridId, false)
         AppActions.beginFillCycle(gridId, "turnStart")
+        AppActions.setFillingEnabled(gridId, true)
+        AppActions.setLaunchOnMatchEnabled(gridId, true)
+
+        AppActions.setFillingEnabled(defenderGridId, false)
+        AppActions.setLaunchOnMatchEnabled(defenderGridId, false)
 
         var defenderState = ensureState(defenderGridId)
         defenderState.phase = "waitingOpponent"

@@ -29,6 +29,7 @@ Item {
     property var hasBeenLaunched: false
     property var block_health: 5
     property var inAnimation: false
+    property int launchDirection: 1
     width: 50
     height: 50
     Rectangle {
@@ -183,14 +184,15 @@ Item {
                                                            "x": globPos.x,
                                                            "y": globPos.y
                                                        })
-                AppActions.blockLaunchCompleted({
+            AppActions.blockLaunchCompleted({
                                                     "row": block.row,
                                                     "column": block.column,
                                                     "grid_id": grid_id,
                                                     "damage": block.block_health,
+                                                    "color": block.block_color
                                                 })
 
-                block.y = 12 * (block.height)
+                block.y += block.launchDirection * 12 * block.height
                 block.z = 999
                 loader.sourceComponent = blockExplodeComponent
 

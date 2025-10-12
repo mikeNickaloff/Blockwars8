@@ -2,6 +2,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../stores" 1.0
+import "../actions" 1.0
 
 Item {
     id: dashboard
@@ -9,9 +10,22 @@ Item {
     property string role: "cpu"
     property var powerupEntries: []
     property bool readyNotified: false
+    property bool powerDataNotified: false
+    property bool seedAcknowledged: false
+    property int poolSeed: -1
+    property bool switchingEnabled: false
+    property bool fillingEnabled: false
+    property bool launchOnMatchEnabled: false
+    property var lastBeginTurnPayload: ({})
+    property var lastTurnEndedPayload: ({})
+    property var lastBeginFillPayload: ({})
+    property var lastActivatedPowerup: null
     property bool topOrientation: gridId === 0
+    property var runtimeSlots: ({})
+    property var dragPermissions: ({})
 
     signal readyStateMod(int gridId, bool ready, string role)
+    signal dashboardCommand(int gridId, string command, var payload)
 
     implicitWidth: 220
     implicitHeight: 320
@@ -31,6 +45,13 @@ Item {
                 readyNotified = false
                 readyStateMod(gridId, false, role)
             }
+            if (powerDataNotified) {
+                powerDataNotified = false
+            }
+            if (seedAcknowledged) {
+                seedAcknowledged = false
+            }
+            poolSeed = -1
             powerupEntries = []
             role = gridId === 0 ? "cpu" : "player"
             return
@@ -38,6 +59,15 @@ Item {
         var entry = data[key]
         role = entry.role !== undefined ? entry.role : (gridId === 0 ? "cpu" : "player")
         powerupEntries = entry.powerups ? entry.powerups : []
+        if (!powerDataNotified && powerupEntries.length > 0) {
+            powerDataNotified = true
+            Qt.callLater(function() {
+                dashboardCommand(gridId, "PowerDataLoaded", JSON.parse(JSON.stringify(powerupEntries)))
+            })
+        }
+        if (entry.seed !== undefined && entry.seed !== null) {
+            setSeed(entry.seed)
+        }
         if (powerupEntries.length > 0) {
             if (!readyNotified) {
                 readyNotified = true
@@ -47,6 +77,58 @@ Item {
             readyNotified = false
             readyStateMod(gridId, false, role)
         }
+    }
+
+    function setSeed(seedValue) {
+        var numericSeed = parseInt(seedValue, 10)
+        if (isNaN(numericSeed)) {
+            return
+        }
+        var seedChanged = poolSeed !== numericSeed
+        poolSeed = numericSeed
+        if (seedChanged || !seedAcknowledged) {
+            seedAcknowledged = true
+            Qt.callLater(function() {
+                dashboardCommand(gridId, "indexSet", { "seed": poolSeed })
+            })
+        }
+    }
+
+    function setSwitchingEnabled(value) {
+        switchingEnabled = value === true
+    }
+
+    function setFillingEnabled(value) {
+        fillingEnabled = value === true
+    }
+
+    function beginFilling(payload) {
+        lastBeginFillPayload = payload || ({})
+    }
+
+    function turnEnded(payload) {
+        lastTurnEndedPayload = payload || ({})
+        switchingEnabled = false
+    }
+
+    function beginTurn(payload) {
+        lastBeginTurnPayload = payload || ({})
+    }
+
+    function setLaunchOnMatchEnabled(value) {
+        launchOnMatchEnabled = value === true
+    }
+
+    function activatePowerup(payload) {
+        lastActivatedPowerup = payload || null
+    }
+
+    function runtimeSlot(slotIndex) {
+        var key = String(slotIndex)
+        if (runtimeSlots && runtimeSlots.hasOwnProperty(key)) {
+            return runtimeSlots[key]
+        }
+        return null
     }
 
     ColumnLayout {
@@ -76,48 +158,137 @@ Item {
 
             Repeater {
                 model: 4
-                delegate: Rectangle {
+                delegate: Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.max(dashboard.height * 0.18, 60)
-                    radius: 12
-                    border.width: 1
-                    border.color: entryData ? Qt.darker(entryColor, 1.3) : "#3a3a48"
-                    color: entryData ? Qt.darker(entryColor, 1.8) : "#1f1f2b"
 
                     property var entryData: dashboard.extractEntry(index)
-                    property color entryColor: entryData && entryData.color ? colorForName(entryData.color) : "#55556a"
+                    property var runtimeState: dashboard.runtimeSlot(index)
+                    property int slotId: runtimeState && runtimeState.slot !== undefined ? runtimeState.slot : index
+                    property color entryColor: runtimeState && runtimeState.color ? colorForName(runtimeState.color) : (entryData && entryData.color ? colorForName(entryData.color) : "#55556a")
+                    property bool slotReady: runtimeState ? runtimeState.ready === true : false
+                    property bool slotDeployed: runtimeState ? runtimeState.deployed === true : false
+                    property bool slotDragAllowed: runtimeState && dashboard.dragPermissions && dashboard.dragPermissions[String(index)] === true
+                    property real energyValue: runtimeState && runtimeState.energy !== undefined ? runtimeState.energy : 0
+                    property real maxEnergy: runtimeState && runtimeState.maxEnergy !== undefined ? runtimeState.maxEnergy : (entryData && entryData.energy ? entryData.energy : 0)
+                    property real energyFraction: maxEnergy > 0 ? Math.max(0, Math.min(1, energyValue / maxEnergy)) : 0
+                    property bool flashOn: false
 
-                    ColumnLayout {
+                    onSlotDragAllowedChanged: {
+                        if (!slotDragAllowed && dragProxy) {
+                            dragProxy.visible = false
+                            dragProxy.Drag.active = false
+                        }
+                    }
+
+                    onSlotDeployedChanged: {
+                        if (slotDeployed && dragProxy) {
+                            dragProxy.visible = false
+                            dragProxy.Drag.active = false
+                        }
+                    }
+
+                    Timer {
+                        id: flashTimer
+                        interval: 600
+                        running: slotReady && slotDragAllowed && !slotDeployed
+                        repeat: true
+                        onTriggered: flashOn = !flashOn
+                    }
+
+                    Rectangle {
+                        id: card
                         anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 4
+                        radius: 12
+                        border.width: 1
+                        border.color: slotReady && slotDragAllowed && !slotDeployed ? (flashOn ? Qt.lighter(entryColor, 1.8) : Qt.darker(entryColor, 1.2)) : Qt.darker(entryColor, 1.5)
+                        color: slotDeployed ? "#2a2a38" : Qt.darker(entryColor, 1.8)
+                        opacity: slotDeployed ? 0.45 : 1.0
 
-                        Label {
-                            text: entryData ? (entryData.displayName || "Powerup") : "Empty Slot"
-                            font.pixelSize: Math.round(dashboard.height * 0.05)
-                            font.bold: entryData !== null
-                            color: "#f4f4f7"
-                        }
-                        Label {
-                            text: entryData ? (entryData.target === "self" ? "Target: Self" : "Target: Enemy") : "Select a powerup"
-                            font.pixelSize: Math.round(dashboard.height * 0.033)
-                            color: "#d0d1df"
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+
                             Label {
-                                text: entryData ? ("Amount: " + entryData.amount) : ""
-                                font.pixelSize: Math.round(dashboard.height * 0.03)
-                                color: "#d0d1df"
+                                text: runtimeState && runtimeState.displayName ? runtimeState.displayName : (entryData ? (entryData.displayName || "Powerup") : "Empty Slot")
+                                font.pixelSize: Math.round(dashboard.height * 0.05)
+                                font.bold: entryData !== null
+                                color: "#f4f4f7"
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 8
+                                radius: 4
+                                color: "#2c2c3d"
+                                border.width: 1
+                                border.color: Qt.darker(entryColor, 1.4)
                                 visible: entryData !== null
+                                Rectangle {
+                                    width: parent.width * energyFraction
+                                    height: parent.height
+                                    radius: parent.radius
+                                    color: entryColor
+                                }
                             }
-                            Label {
-                                text: entryData && entryData.type === "blocks" ? ("Cells: " + countSelected(entryData)) : ""
-                                font.pixelSize: Math.round(dashboard.height * 0.03)
-                                color: "#d0d1df"
-                                visible: entryData !== null && entryData.type === "blocks"
+                        }
+
+                        MouseArea {
+                            id: dragArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: slotDragAllowed && !slotDeployed && dashboard.gridId === 1
+                            drag.target: dragProxy
+                            onPressed: {
+                                if (!enabled)
+                                    return
+                                dragProxy.visible = true
+                                dragProxy.x = card.mapToItem(dashboard, 0, 0).x
+                                dragProxy.y = card.mapToItem(dashboard, 0, 0).y
+                                card.opacity = 0.6
                             }
+                            onReleased: {
+                                if (!enabled) {
+                                    dragProxy.visible = false
+                                    card.opacity = slotDeployed ? 0.45 : 1.0
+                                    return
+                                }
+                                var target = dragProxy.Drag.target
+                                dragProxy.Drag.active = false
+                                dragProxy.visible = false
+                                dragProxy.anchors.fill = card
+                                card.opacity = slotDeployed ? 0.45 : 1.0
+                                if (target) {
+                                    AppActions.requestPowerupDeployment({
+                                                                           "grid_id": dashboard.gridId,
+                                                                           "slot_id": slotId,
+                                                                           "row": target.row,
+                                                                           "column": target.column,
+                                                                           "color": runtimeState ? runtimeState.color : (entryData ? entryData.color : ""),
+                                                                           "displayName": runtimeState && runtimeState.displayName ? runtimeState.displayName : (entryData ? entryData.displayName : "Powerup")
+                                                                       })
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            id: dragProxy
+                            anchors.fill: card
+                            radius: card.radius
+                            color: Qt.rgba(entryColor.r, entryColor.g, entryColor.b, 0.6)
+                            visible: false
+                            z: 10
+                            Drag.active: dragArea.drag.active && dragArea.enabled
+                            Drag.hotSpot.x: width / 2
+                            Drag.hotSpot.y: height / 2
+                            Drag.keys: [dashboard.gridId]
+                            states: [
+                                State {
+                                    when: dragProxy.Drag.active
+                                    ParentChange { target: dragProxy; parent: dashboard }
+                                    AnchorChanges { target: dragProxy;  }
+                                }
+                            ]
                         }
                     }
                 }

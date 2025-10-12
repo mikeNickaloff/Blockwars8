@@ -475,6 +475,263 @@ Item {
 
             property bool topDashboardReady: false
             property bool bottomDashboardReady: false
+            property bool powerupsLoaded0: false
+            property bool powerupsLoaded1: false
+            property bool initialSetupDispatched: false
+            property bool seedsBroadcast: false
+            property bool indexSet0: false
+            property bool indexSet1: false
+            property int dashboardSeed0: -1
+            property int dashboardSeed1: -1
+            property bool gameInitialized: false
+            property bool turnCycleStarted: false
+            property bool initialGridReady0: false
+            property bool initialGridReady1: false
+            property var dashboardPowerData: ({ "0": [], "1": [] })
+            property var powerupRuntimeState: ({})
+            property var dragPermissions: ({ "0": {}, "1": {} })
+            property var gridIdleState: ({ "0": false, "1": false })
+            property var gridMovesRemaining: ({ "0": 0, "1": 0 })
+            property int activeGridId: -1
+
+            signal dashboardSetSwitchingEnabled(int gridId, bool enabled)
+            signal dashboardSetFillingEnabled(int gridId, bool enabled)
+            signal dashboardBeginFilling(int gridId, var payload)
+            signal dashboardTurnEnded(int gridId, var payload)
+            signal dashboardBeginTurn(int gridId, var payload)
+            signal dashboardSetLaunchOnMatchEnabled(int gridId, bool enabled)
+            signal dashboardActivatePowerup(int gridId, var payload)
+            signal powerupRuntimeChanged()
+
+            function handleDashboardCommand(gridId, command, payload) {
+                switch (command) {
+                case "PowerDataLoaded":
+                    storeDashboardPowerups(gridId, payload)
+                    break
+                case "indexSet":
+                    storeDashboardSeed(gridId, payload)
+                    break
+                default:
+                    break
+                }
+            }
+
+            function runtimeSlotsFor(gridId) {
+                var key = String(gridId)
+                if (powerupRuntimeState && powerupRuntimeState.hasOwnProperty(key)) {
+                    return powerupRuntimeState[key].slots || {}
+                }
+                return {}
+            }
+
+            function storeDashboardPowerups(gridId, payload) {
+                var key = gridId === 0 ? "0" : "1"
+                var storedPayload = []
+                if (payload !== undefined && payload !== null) {
+                    try {
+                        storedPayload = JSON.parse(JSON.stringify(payload))
+                    } catch (err) {
+                        storedPayload = payload
+                    }
+                }
+                dashboardPowerData[key] = storedPayload
+                if (gridId === 0) {
+                    if (!powerupsLoaded0) {
+                        powerupsLoaded0 = true
+                    } else {
+                        checkPowerupHandshake()
+                    }
+                } else if (gridId === 1) {
+                    if (!powerupsLoaded1) {
+                        powerupsLoaded1 = true
+                    } else {
+                        checkPowerupHandshake()
+                    }
+                }
+            }
+
+            function storeDashboardSeed(gridId, payload) {
+                var value = -1
+                if (payload && payload.seed !== undefined) {
+                    var parsed = parseInt(payload.seed, 10)
+                    if (!isNaN(parsed)) {
+                        value = parsed
+                    }
+                }
+                if (gridId === 0) {
+                    dashboardSeed0 = value
+                    indexSet0 = value >= 0
+                } else if (gridId === 1) {
+                    dashboardSeed1 = value
+                    indexSet1 = value >= 0
+                }
+                checkIndexHandshake()
+            }
+
+            function checkPowerupHandshake() {
+                if (initialSetupDispatched) {
+                    return
+                }
+                if (!(powerupsLoaded0 && powerupsLoaded1)) {
+                    return
+                }
+                initialSetupDispatched = true
+                Qt.callLater(function() {
+                    if (!seedsBroadcast) {
+                        broadcastSeeds()
+                    }
+                    checkIndexHandshake()
+                })
+            }
+
+            function broadcastSeeds() {
+                if (seedsBroadcast) {
+                    return
+                }
+                var seed0 = Math.floor(Math.random() * 500) + 1
+                var seed1 = Math.floor(Math.random() * 500) + 1
+                seedsBroadcast = true
+                Qt.callLater(function() {
+                    if (topDashboard && topDashboard.setSeed) {
+                        topDashboard.setSeed(seed0)
+                    }
+                    if (bottomDashboard && bottomDashboard.setSeed) {
+                        bottomDashboard.setSeed(seed1)
+                    }
+                })
+            }
+
+            function checkIndexHandshake() {
+                if (gameInitialized) {
+                    return
+                }
+                if (!(indexSet0 && indexSet1)) {
+                    return
+                }
+                initializeGame()
+            }
+
+            function initializeGame() {
+                if (gameInitialized) {
+                    return
+                }
+                gameInitialized = true
+                dashboardSetSwitchingEnabled(0, false)
+                dashboardSetSwitchingEnabled(1, false)
+                dashboardSetFillingEnabled(0, true)
+                dashboardSetFillingEnabled(1, true)
+                dashboardSetLaunchOnMatchEnabled(0, true)
+                dashboardSetLaunchOnMatchEnabled(1, true)
+                dashboardBeginFilling(0, { "source": "initializeGame" })
+                dashboardBeginFilling(1, { "source": "initializeGame" })
+                AppActions.setFillingEnabled(0, true)
+                AppActions.setFillingEnabled(1, true)
+                AppActions.setLaunchOnMatchEnabled(0, true)
+                AppActions.setLaunchOnMatchEnabled(1, true)
+                AppActions.beginFillCycle(0, "powerups_loaded")
+                AppActions.beginFillCycle(1, "powerups_loaded")
+                maybeStartTurnCycle()
+            }
+
+            function handleInitialGridReady(info) {
+                if (!info) {
+                    return
+                }
+                if (info.grid_id === 0 && info.initial_fill === false && info.has_empty === false) {
+                    initialGridReady0 = true
+                } else if (info.grid_id === 1 && info.initial_fill === false && info.has_empty === false) {
+                    initialGridReady1 = true
+                }
+                maybeStartTurnCycle()
+            }
+
+            function maybeStartTurnCycle() {
+                if (!gameInitialized || turnCycleStarted) {
+                    return
+                }
+                if (!(initialGridReady0 && initialGridReady1)) {
+                    return
+                }
+                turnCycleStarted = true
+                AppActions.initializeTurnCycle({
+                                                 "attacker_grid_id": turnController.playerGridId,
+                                                 "defender_grid_id": turnController.cpuGridId,
+                                                 "moves": turnController.movesPerTurn
+                                             })
+            }
+
+            function updateRuntimeState(runtime) {
+                powerupRuntimeState = runtime || {}
+                computeDragPermissions()
+                powerupRuntimeChanged()
+                if (topDashboard) {
+                    topDashboard.runtimeSlots = runtimeSlotsFor(0)
+                }
+                if (bottomDashboard) {
+                    bottomDashboard.runtimeSlots = runtimeSlotsFor(1)
+                }
+            }
+
+            function updateGridIdle(info) {
+                if (!info || info.grid_id === undefined) {
+                    return
+                }
+                var key = String(info.grid_id)
+                var idle = info.state === "idle" && info.has_empty === false
+                var updated = {}
+                updated[key] = idle
+                gridIdleState = Object.assign({}, gridIdleState, updated)
+                computeDragPermissions()
+            }
+
+            function updateMoves(gridId, moves) {
+                var key = String(gridId)
+                var updated = {}
+                updated[key] = moves
+                gridMovesRemaining = Object.assign({}, gridMovesRemaining, updated)
+                computeDragPermissions()
+            }
+
+            function updateActiveGrid(gridId) {
+                activeGridId = gridId
+                computeDragPermissions()
+            }
+
+            function computeDragPermissions() {
+                var permissions = { "0": {}, "1": {} }
+                if (activeGridId === -1) {
+                    dragPermissions = permissions
+                    return
+                }
+                var activeKey = String(activeGridId)
+                var defenderKey = activeKey === "0" ? "1" : "0"
+                if (gridMovesRemaining[activeKey] <= 0) {
+                    dragPermissions = permissions
+                    return
+                }
+                if (!(gridIdleState[activeKey] === true && gridIdleState[defenderKey] === true)) {
+                    dragPermissions = permissions
+                    return
+                }
+                var slots = runtimeSlotsFor(activeGridId)
+                for (var slotKey in slots) {
+                    if (!slots.hasOwnProperty(slotKey)) {
+                        continue
+                    }
+                    var slotState = slots[slotKey]
+                    permissions[activeKey][slotKey] = slotState.ready === true && slotState.deployed !== true
+                }
+                dragPermissions = permissions
+                if (topDashboard) {
+                    topDashboard.dragPermissions = dragPermissions["0"]
+                }
+                if (bottomDashboard) {
+                    bottomDashboard.dragPermissions = dragPermissions["1"]
+                }
+            }
+
+            onPowerupsLoaded0Changed: checkPowerupHandshake()
+            onPowerupsLoaded1Changed: checkPowerupHandshake()
 
             Rectangle {
                 anchors.fill: parent
@@ -515,6 +772,7 @@ Item {
                                     id: gameGridTop
                                     anchors.fill: parent
                                     grid_id: 0
+                                    fillDirection: 1
                                 }
                             }
 
@@ -523,12 +781,55 @@ Item {
                                 Layout.preferredWidth: Math.min(gameHost.width * 0.24, 220)
                                 Layout.fillHeight: true
                                 gridId: 0
+                                runtimeSlots: ({})
+                                dragPermissions: ({})
                                 Connections {
                                     target: topDashboard
                                     function onReadyStateMod(grid, ready, role) {
                                         gameHost.topDashboardReady = ready
                                         if (ready) {
                                             AppActions.gameBoardDashboardsReady({ "grid_id": grid, "role": role })
+                                        }
+                                    }
+                                    function onDashboardCommand(grid, command, payload) {
+                                        gameHost.handleDashboardCommand(grid, command, payload)
+                                    }
+                                }
+                                Connections {
+                                    target: gameHost
+                                    function onDashboardSetSwitchingEnabled(grid, enabled) {
+                                        if (grid === topDashboard.gridId) {
+                                            topDashboard.setSwitchingEnabled(enabled)
+                                        }
+                                    }
+                                    function onDashboardSetFillingEnabled(grid, enabled) {
+                                        if (grid === topDashboard.gridId) {
+                                            topDashboard.setFillingEnabled(enabled)
+                                        }
+                                    }
+                                    function onDashboardBeginFilling(grid, payload) {
+                                        if (grid === topDashboard.gridId) {
+                                            topDashboard.beginFilling(payload)
+                                        }
+                                    }
+                                    function onDashboardTurnEnded(grid, payload) {
+                                        if (grid === topDashboard.gridId) {
+                                            topDashboard.turnEnded(payload)
+                                        }
+                                    }
+                                    function onDashboardBeginTurn(grid, payload) {
+                                        if (grid === topDashboard.gridId) {
+                                            topDashboard.beginTurn(payload)
+                                        }
+                                    }
+                                    function onDashboardSetLaunchOnMatchEnabled(grid, enabled) {
+                                        if (grid === topDashboard.gridId) {
+                                            topDashboard.setLaunchOnMatchEnabled(enabled)
+                                        }
+                                    }
+                                    function onDashboardActivatePowerup(grid, payload) {
+                                        if (grid === topDashboard.gridId) {
+                                            topDashboard.activatePowerup(payload)
                                         }
                                     }
                                 }
@@ -564,9 +865,8 @@ Item {
                                 GameGrid {
                                     id: gameGridBottom
                                     anchors.fill: parent
-                                    rotation: 180
-                                    transformOrigin: gameGridBottom.Center
                                     grid_id: 1
+                                    fillDirection: -1
                                 }
                             }
 
@@ -575,12 +875,55 @@ Item {
                                 Layout.preferredWidth: Math.min(gameHost.width * 0.24, 220)
                                 Layout.fillHeight: true
                                 gridId: 1
+                                runtimeSlots: ({})
+                                dragPermissions: ({})
                                 Connections {
                                     target: bottomDashboard
                                     function onReadyStateMod(grid, ready, role) {
                                         gameHost.bottomDashboardReady = ready
                                         if (ready) {
                                             AppActions.gameBoardDashboardsReady({ "grid_id": grid, "role": role })
+                                        }
+                                    }
+                                    function onDashboardCommand(grid, command, payload) {
+                                        gameHost.handleDashboardCommand(grid, command, payload)
+                                    }
+                                }
+                                Connections {
+                                    target: gameHost
+                                    function onDashboardSetSwitchingEnabled(grid, enabled) {
+                                        if (grid === bottomDashboard.gridId) {
+                                            bottomDashboard.setSwitchingEnabled(enabled)
+                                        }
+                                    }
+                                    function onDashboardSetFillingEnabled(grid, enabled) {
+                                        if (grid === bottomDashboard.gridId) {
+                                            bottomDashboard.setFillingEnabled(enabled)
+                                        }
+                                    }
+                                    function onDashboardBeginFilling(grid, payload) {
+                                        if (grid === bottomDashboard.gridId) {
+                                            bottomDashboard.beginFilling(payload)
+                                        }
+                                    }
+                                    function onDashboardTurnEnded(grid, payload) {
+                                        if (grid === bottomDashboard.gridId) {
+                                            bottomDashboard.turnEnded(payload)
+                                        }
+                                    }
+                                    function onDashboardBeginTurn(grid, payload) {
+                                        if (grid === bottomDashboard.gridId) {
+                                            bottomDashboard.beginTurn(payload)
+                                        }
+                                    }
+                                    function onDashboardSetLaunchOnMatchEnabled(grid, enabled) {
+                                        if (grid === bottomDashboard.gridId) {
+                                            bottomDashboard.setLaunchOnMatchEnabled(enabled)
+                                        }
+                                    }
+                                    function onDashboardActivatePowerup(grid, payload) {
+                                        if (grid === bottomDashboard.gridId) {
+                                            bottomDashboard.activatePowerup(payload)
                                         }
                                     }
                                 }
@@ -602,16 +945,133 @@ Item {
                 }
 
                 Component.onCompleted: {
-                    AppActions.beginFillCycle(0, "initial")
-                    AppActions.beginFillCycle(1, "initial")
-                    AppActions.createOneShotTimer(gameHost, 240, function() {
-                        AppActions.initializeTurnCycle({
-                                                         "attacker_grid_id": turnController.playerGridId,
-                                                         "defender_grid_id": turnController.cpuGridId,
-                                                         "moves": turnController.movesPerTurn
-                                                     })
-                    }, ({}))
+                    checkPowerupHandshake()
+                    gameHost.updateRuntimeState(MainStore.powerup_runtime_state)
                 }
+
+                AppListener {
+                    filter: ActionTypes.enableBlocks
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardSetSwitchingEnabled(data.grid_id, data.blocks_enabled === true)
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.beginFillCycle
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardSetFillingEnabled(data.grid_id, true)
+                        gameHost.dashboardBeginFilling(data.grid_id, data || ({}))
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.gridSettled
+                    onDispatched: function(type, info) {
+                        if (!info || info.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardSetFillingEnabled(info.grid_id, info.has_empty === true)
+                        if (!gameHost.turnCycleStarted) {
+                            gameHost.handleInitialGridReady(info)
+                        }
+                        gameHost.updateGridIdle(info)
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.setFillingEnabled
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardSetFillingEnabled(data.grid_id, data.enabled === true)
+                        if (data.enabled === true) {
+                            gameHost.dashboardBeginFilling(data.grid_id, { "source": "resume" })
+                        }
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.turnCycleTurnBegan
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.updateActiveGrid(data.grid_id)
+                        gameHost.updateMoves(data.grid_id, data.moves_remaining !== undefined ? data.moves_remaining : 0)
+                        if (data.defender_grid_id !== undefined) {
+                            gameHost.updateMoves(data.defender_grid_id, 0)
+                        }
+                        gameHost.dashboardBeginTurn(data.grid_id, data || ({}))
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.requestNextTurn
+                    onDispatched: function(type, data) {
+                        if (!data || data.from_grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardTurnEnded(data.from_grid_id, data || ({}))
+                        gameHost.updateMoves(data.from_grid_id, 0)
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.swapLaunchingStarted
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardSetLaunchOnMatchEnabled(data.grid_id, false)
+                        gameHost.updateMoves(data.grid_id, data.moves_remaining !== undefined ? data.moves_remaining : 0)
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.swapLaunchingAnimationsDone
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardSetLaunchOnMatchEnabled(data.grid_id, true)
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.setLaunchOnMatchEnabled
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardSetLaunchOnMatchEnabled(data.grid_id, data.enabled === true)
+                    }
+                }
+
+                AppListener {
+                    filter: ActionTypes.activatePowerup
+                    onDispatched: function(type, data) {
+                        if (!data || data.grid_id === undefined) {
+                            return
+                        }
+                        gameHost.dashboardActivatePowerup(data.grid_id, data || ({}))
+                    }
+                }
+
+                Connections {
+                    target: MainStore
+                    function onPowerup_runtime_stateChanged() {
+                        gameHost.updateRuntimeState(MainStore.powerup_runtime_state)
+                    }
+                }
+
+
             }
         }
     }

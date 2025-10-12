@@ -17,6 +17,7 @@ import "../elements" 1.0
 import "../components" 1.0
 import QtQuick.Particles 2.0
 import "." 1.0
+import com.blockwars 1.0
 
 Item {
     id: gridRoot
@@ -38,18 +39,27 @@ Item {
     property bool initialFill: true
     property bool activeTurn: true
     property int turns: 3
+    property int fillDirection: 1
     property int verticalDirection: 1
+    property bool damageCompactQueued: false
+    property bool cascadesEnabled: true
+    property bool launchOnMatchEnabled: true
+    property bool pendingCascade: false
+    property string pendingCascadeReason: "resume"
+    property int pool_index: Math.floor(Math.random() * 1000)
 
     signal gridSettled(var info)
 
     Component.onCompleted: {
-        var normalizedRotation = gridRoot.rotation
-        normalizedRotation = ((normalizedRotation % 360) + 360) % 360
-        verticalDirection = normalizedRotation === 180 ? -1 : 1
+        verticalDirection = fillDirection < 0 ? -1 : 1
         grid_blocks = new Array(maxIndex)
         for (var i = 0; i < maxIndex; ++i) {
             grid_blocks[i] = null
         }
+    }
+
+    onFillDirectionChanged: {
+        verticalDirection = fillDirection < 0 ? -1 : 1
     }
 
     Timer {
@@ -107,6 +117,10 @@ Item {
     function setGridState(nextState, reason) {
         var previous = gridState
         if (previous === nextState) {
+            return
+        }
+        if (!cascadesEnabled && nextState !== "idle") {
+            gridState = "idle"
             return
         }
         resetStateTimers()
@@ -189,6 +203,18 @@ Item {
         return false
     }
 
+    function get_next_random_color() {
+        pool_index++
+        var palette = ["red", "green", "blue", "yellow"]
+        var selector = blockPool.randomNumber(pool_index)
+        var idx = Math.abs(selector) % palette.length
+        return palette[idx]
+    }
+
+    function isPowerupTile(obj) {
+        return obj && Qt.isQtObject(obj) && obj.objectName === "PowerupTile"
+    }
+
     function requestColumnFill(column) {
         AppActions.createOneBlock(grid_id, spawnRowIndex(), column)
     }
@@ -216,6 +242,9 @@ Item {
     }
 
     function processFillStep() {
+        if (!cascadesEnabled) {
+            return
+        }
         if (gridState !== "fill") {
             return
         }
@@ -246,6 +275,9 @@ Item {
     }
 
     function processCompactStep() {
+        if (!cascadesEnabled) {
+            return
+        }
         if (gridState !== "compact") {
             return
         }
@@ -321,13 +353,121 @@ Item {
     }
 
     function beginFillCycle(reason) {
+        pendingCascadeReason = reason || "beginFill"
+        if (!cascadesEnabled) {
+            pendingCascade = true
+            return
+        }
+        pendingCascade = false
         matchList = []
         launchCount = 0
         incomingBlocks = []
-        setGridState("compact", reason || "beginFill")
+        setGridState("compact", pendingCascadeReason)
+    }
+
+    function resumeCascadeIfNeeded() {
+        if (!cascadesEnabled) {
+            return
+        }
+        if (damageCompactQueued) {
+            damageCompactQueued = false
+            AppActions.enqueueGridEvent("shuffleDown", grid_id, {
+                                            "source_event": "resume"
+                                        })
+        }
+        if ((pendingCascade || hasEmptyCells()) && gridState === "idle" && !hasAnimatingBlocks()) {
+            pendingCascade = false
+            AppActions.beginFillCycle(grid_id, pendingCascadeReason || "resume")
+        }
+    }
+
+    function handlePowerupDeployment(data) {
+        if (!data || data.grid_id !== grid_id) {
+            return
+        }
+        var row = data.row !== undefined ? data.row : -1
+        var column = data.column !== undefined ? data.column : -1
+        var slotId = data.slot_id !== undefined ? data.slot_id : -1
+        if (!cascadesEnabled || hasAnimatingBlocks()) {
+            AppActions.confirmPowerupDeployment({
+                                                    "grid_id": grid_id,
+                                                    "slot_id": slotId,
+                                                    "success": false
+                                                })
+            return
+        }
+        if (!rowWithinBounds(row) || column < 0 || column + 1 >= maxColumn || slotId < 0) {
+            AppActions.confirmPowerupDeployment({
+                                                    "grid_id": grid_id,
+                                                    "slot_id": slotId,
+                                                    "success": false
+                                                })
+            return
+        }
+        var cells = [column, column + 1]
+        for (var i = 0; i < cells.length; ++i) {
+            var existing = getBlock(row, cells[i])
+            if (isPowerupTile(existing)) {
+                AppActions.confirmPowerupDeployment({
+                                                        "grid_id": grid_id,
+                                                        "slot_id": slotId,
+                                                        "success": false
+                                                    })
+                return
+            }
+        }
+        var cellWidth = Math.floor(gridRoot.width / maxColumn)
+        var cellHeight = Math.floor(gridRoot.height / maxRow)
+        for (var j = 0; j < cells.length; ++j) {
+            var blockObj = getBlock(row, cells[j])
+            if (blockObj && Qt.isQtObject(blockObj)) {
+                blockObj.destroy()
+            }
+            setBlockAt(row, cells[j], null)
+        }
+        var tileColor = data.color ? resolveBlockColor(data.color) : "#888896"
+        var tile = powerupTileComponent.createObject(gridRoot, {
+                                                        "x": Qt.binding(function() { return (gridRoot.width / maxColumn) * column; }),
+                                                        "y": Qt.binding(function() { return (gridRoot.height / maxRow) * row; }),
+                                                        "width": Qt.binding(function() { return (gridRoot.width / maxColumn) * 2; }),
+                                                        "height": Qt.binding(function() { return gridRoot.height / maxRow; }),
+                                                        "colorName": tileColor,
+                                                        "gridId": grid_id,
+                                                        "slotId": slotId,
+                                                        "displayName": data.displayName !== undefined ? data.displayName : "Powerup"
+                                                    })
+        if (!tile) {
+            AppActions.confirmPowerupDeployment({
+                                                    "grid_id": grid_id,
+                                                    "slot_id": slotId,
+                                                    "success": false
+                                                })
+            return
+        }
+        tile.row = row
+        tile.column = column
+        tile.rightColumn = column + 1
+        setBlockAt(row, column, tile)
+        setBlockAt(row, column + 1, tile)
+        cleanupBlocks()
+        AppActions.confirmPowerupDeployment({
+                                                "grid_id": grid_id,
+                                                "slot_id": slotId,
+                                                "row": row,
+                                                "column": column,
+                                                "success": true
+                                            })
+        AppActions.powerupEnergyReset(grid_id, slotId)
+        AppActions.activatePowerup(slotId, grid_id)
+        AppActions.enqueueGridEvent("checkMatches", grid_id, {
+                                        "source_event": "powerupPlaced"
+                                    })
     }
 
     function processMatchStep() {
+        if (!cascadesEnabled) {
+            return
+        }
         if (gridState !== "match") {
             return
         }
@@ -336,6 +476,11 @@ Item {
         }
         if (hasEmptyCells()) {
             setGridState("compact", "matchFoundEmpty")
+            return
+        }
+        if (!launchOnMatchEnabled) {
+            pendingCascade = true
+            setGridState("idle", "launchDisabled")
             return
         }
         matchList = collectMatches().map(function (entry) {
@@ -358,6 +503,9 @@ Item {
     }
 
     function processLaunchStep() {
+        if (!cascadesEnabled || !launchOnMatchEnabled) {
+            return
+        }
         if (gridState !== "launch") {
             return
         }
@@ -377,6 +525,7 @@ Item {
             Qt.callLater(processLaunchStep)
             return
         }
+        blk.launchDirection = verticalDirection
         clearBlockAt(pending.row, pending.column)
         blk.launch()
         launchCount += 1
@@ -480,7 +629,8 @@ Item {
                                                   "width": blkW,
                                                   "height": blkH,
                                                   "block_color": colorName,
-                                                  "grid_id": grid_id
+                                                  "grid_id": grid_id,
+                                                  "launchDirection": verticalDirection
                                               })
         if (!blk) {
             return null
@@ -601,6 +751,9 @@ Item {
                     var column = ddata.column
                     clearBlockAt(row, column)
                     cleanupBlocks()
+                    if (ddata.color) {
+                        AppActions.powerupEnergyDelta(grid_id, -1, ddata.color, ddata.damage !== undefined ? ddata.damage : 0, "launch")
+                    }
                     if (launchCount > 0) {
                         launchCount--
                     }
@@ -609,41 +762,35 @@ Item {
                         setGridState("compact", "launchCompleteAck")
                     }
                 } else {
-                    console.log("detected block launch complete from other grid", JSON.stringify(ddata))
-                    var current_healths = [];
-                    var incoming_dmg = ddata.damage;
-                    var current_col = 5 - ddata.column;
-                    for (var u=5; u>=0; u--) {
-                        if (grid_blocks[index(u, current_col)] != null) { current_healths.push(grid_blocks[index(u, current_col)].block_health); } else { current_healths.push(0); }
+                    var attackerGridId = ddata.grid_id
+                    var incomingDamage = ddata.damage !== undefined ? ddata.damage : 0
+                    var launchColor = ddata.color !== undefined ? ddata.color : null
+                    if (launchColor && incomingDamage > 0) {
+                        AppActions.powerupEnergyDelta(attackerGridId, -1, launchColor, incomingDamage, "launch")
                     }
-                    console.log("current block healths on",current_col,current_healths);
-                    var destroy_list = [];
-
-                    for (u=0; u<current_healths.length; u++) {
-                        if (current_healths[u] > 0) {
-                            if (incoming_dmg > 0) {
-                                var blk_health = current_healths[u];
-                                current_healths[u] -= incoming_dmg;
-                                incoming_dmg -= blk_health;
-
-
-                                if (!initialFill) {
-                                    console.log("modifying block health", 5 - u,current_col,grid_id, current_healths[u])
-                                    AppActions.modifyBlockHealth( 5 - u, current_col, grid_id, current_healths[u])
-                                } else {
-                                    console.log("Not modifying health due to initialFill flag");
-                                }
-                                if (incoming_dmg < 1) { incoming_dmg = 0; break; }
-
-                            } else {
-                                break;
-                            }
-                        } else {
-                            continue;
+                    if (incomingDamage <= 0) {
+                        return
+                    }
+                    var targetColumn = Math.max(0, Math.min(maxColumn - 1, (maxColumn - 1) - ddata.column))
+                    var rowIter = frontRowIndex()
+                    while (incomingDamage > 0 && rowWithinBounds(rowIter)) {
+                        var defenderBlock = getBlock(rowIter, targetColumn)
+                        if (!defenderBlock) {
+                            rowIter = nextRowIndex(rowIter)
+                            continue
                         }
+                        var beforeHealth = defenderBlock.block_health !== undefined ? defenderBlock.block_health : 0
+                        if (beforeHealth <= 0) {
+                            rowIter = nextRowIndex(rowIter)
+                            continue
+                        }
+                        var applied = Math.min(beforeHealth, incomingDamage)
+                        incomingDamage -= applied
+                        AppActions.powerupEnergyDelta(attackerGridId, -1, defenderBlock.block_color, applied, "defenderDamage")
+                        var remaining = beforeHealth - applied
+                        AppActions.modifyBlockHealth(rowIter, targetColumn, grid_id, remaining)
+                        rowIter = nextRowIndex(rowIter)
                     }
-
-
                 }
             }
         }
@@ -662,6 +809,80 @@ Item {
             }
         }
 
+        AppListener {
+            filter: ActionTypes.modifyBlockHealth
+            onDispatched: function(dtype, data) {
+                if (!data || data.grid_id !== grid_id) {
+                    return
+                }
+                var row = data.row !== undefined ? data.row : data.r
+                var column = data.column !== undefined ? data.column : data.col
+                if (row === undefined || column === undefined) {
+                    return
+                }
+                var amount = data.amount !== undefined ? data.amount : data.health
+                if (amount === undefined) {
+                    return
+                }
+                if (amount > 0) {
+                    return
+                }
+
+                clearBlockAt(row, column)
+                cleanupBlocks()
+
+                if (!cascadesEnabled) {
+                    damageCompactQueued = true
+                    pendingCascade = true
+                    pendingCascadeReason = "damage"
+                    return
+                }
+
+                if (!damageCompactQueued) {
+                    damageCompactQueued = true
+                    AppActions.enqueueGridEvent("shuffleDown", grid_id, {
+                                                    "source_event": "damage"
+                                                })
+                }
+            }
+        }
+
+        AppListener {
+            filter: ActionTypes.setFillingEnabled
+            onDispatched: function(dtype, data) {
+                if (!data || data.grid_id !== grid_id) {
+                    return
+                }
+                cascadesEnabled = data.enabled === true
+                if (!cascadesEnabled) {
+                    resetStateTimers()
+                    gridState = "idle"
+                } else {
+                    resumeCascadeIfNeeded()
+                }
+            }
+        }
+
+        AppListener {
+            filter: ActionTypes.setLaunchOnMatchEnabled
+            onDispatched: function(dtype, data) {
+                if (!data || data.grid_id !== grid_id) {
+                    return
+                }
+                launchOnMatchEnabled = data.enabled === true
+                if (launchOnMatchEnabled) {
+                    resumeCascadeIfNeeded()
+                }
+            }
+        }
+
+        AppListener {
+            filter: ActionTypes.deployPowerupRequest
+            onDispatched: function(dtype, data) {
+                handlePowerupDeployment(data)
+            }
+        }
+
         function handleGridEventExecute(event) {
             current_event = event
             var event_type = event.event_type
@@ -671,6 +892,13 @@ Item {
                 AppActions.gridEventDone(current_event)
                 break
             case "shuffleDown":
+                if (!cascadesEnabled) {
+                    pendingCascade = true
+                    damageCompactQueued = true
+                    AppActions.gridEventDone(current_event)
+                    break
+                }
+                damageCompactQueued = false
                 setGridState("compact", event.source_event || "queue")
                 AppActions.gridEventDone(current_event)
                 break
@@ -816,7 +1044,8 @@ Item {
                 return
             }
 
-            var blk = instantiateBlock(spawnRow, column, event.color, {
+            var colorValue = event.color !== undefined ? event.color : get_next_random_color()
+            var blk = instantiateBlock(spawnRow, column, colorValue, {
                                            "register": register
                                        })
             if (blk && !register) {
@@ -838,15 +1067,15 @@ Item {
                 continue
             }
 
-            var newColors = columnInfo.new_colors ? columnInfo.new_colors.slice() : []
-            if (newColors.length === 0) {
+            var missing = columnInfo.missing !== undefined ? columnInfo.missing : 0
+            if (missing <= 0) {
                 continue
             }
-            var missing = columnInfo.missing !== undefined ? columnInfo.missing : newColors.length
-            var limit = Math.min(newColors.length, missing)
+            var limit = missing
             for (var idx = 0; idx < limit; idx++) {
                 var spawn = spawnRowIndex()
-                var blk = instantiateBlock(spawn, column, newColors[idx], {
+                var colorValue = columnInfo.new_colors && columnInfo.new_colors[idx] !== undefined ? columnInfo.new_colors[idx] : get_next_random_color()
+                var blk = instantiateBlock(spawn, column, colorValue, {
                                               "register": rowWithinBounds(spawn)
                                           })
                 if (blk && !rowWithinBounds(spawn)) {
@@ -995,4 +1224,15 @@ Item {
                 id: blk
             }
         }
+
+        Component {
+            id: powerupTileComponent
+            PowerupTile {
+                id: powerTile
+            }
+        }
+        Pool {
+            id: blockPool
+        }
+
     }

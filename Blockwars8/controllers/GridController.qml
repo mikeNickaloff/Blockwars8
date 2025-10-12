@@ -190,10 +190,6 @@ Item {
                 evt.event_type = "createOneBlock"
                 evt.row = message.row
                 evt.column = message.column
-                var pool = getPool(message.column)
-                var rand_color = pool.randomNumber(getPoolIndex(message.column))
-                controller_root.increasePoolIndex(message.column)
-                evt.color = rand_color
                 grid_event_queue.push(evt)
                 if (!waitingForCallback) {
                     executeNextGridEvent()
@@ -280,29 +276,14 @@ Item {
         console.log("filling in")
         for (var i = 0; i < 6; i++) {
             var colMissingCount = 0
-            var pool = getPool(i)
-            var pool_index = getPoolIndex(i)
-            var new_colors = []
             for (var u = 0; u < 6; u++) {
                 if (grid_block_data[index(u, i)] == null) {
                     colMissingCount++
-                    var rand_color = pool.randomNumber(pool_index)
-                    pool_index++
-                    controller_root.increasePoolIndex(i)
-                    var palette = ["red", "blue", "yellow", "green"]
-                    var normalizedIndex = rand_color
-                    if (normalizedIndex === undefined || normalizedIndex === null) {
-                        normalizedIndex = 0
-                    }
-                    normalizedIndex = Math.abs(normalizedIndex) % palette.length
-                    var block_color = palette[normalizedIndex]
-                    new_colors.push(block_color)
                 }
             }
             if (colMissingCount > 0) {
                 creationCounts[String(i)] = {
-                    "missing": colMissingCount,
-                    "new_colors": new_colors
+                    "missing": colMissingCount
                 }
             }
         }
