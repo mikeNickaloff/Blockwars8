@@ -11,3 +11,5 @@
 
 ### Why this doesn't mattter
 - Working on Blockwars24 now that is going to have a nice abstraction layer which will essentially encapsulate all the redundant code from Blockwars8 into each individual component that will then make quick work out of this simple game rather than creating a boat load of AppActions im going to create just a few layers of abstraction and call it a day.
+
+### How did I get ChatGPT to do all this complex wiring?  Check out <u>AGENTS.md</u> in this repo -- this is the prompt I used for the project.. longer than the code tbh
