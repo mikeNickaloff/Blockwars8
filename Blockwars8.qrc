@@ -6,6 +6,8 @@
         <file>Blockwars8/actions/AppActions.qml</file>
         <file>Blockwars8/actions/ActionTypes.qml</file>
         <file>Blockwars8/actions/qmldir</file>
+        <file>quickflux/PowerupEditorAction.qml</file>
+        <file>quickflux/qmldir</file>
         <file>Blockwars8/constants/Constants.qml</file>
         <file>Blockwars8/constants/qmldir</file>
         <file>Blockwars8/stores/RootStore.qml</file>

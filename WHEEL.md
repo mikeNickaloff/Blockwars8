@@ -72,6 +72,32 @@ Singleton `KeyTable` of action type keys for QuickFlux dispatch/observe across t
 ### activatePowerup -- action key to activate a powerup slot
 ### modifyBlockHealth -- action key to adjust health at a cell
 ### setActiveGrid -- action key to mark which grid is active (attacker)
+### powerupEditorNamespace -- namespace prefix for powerup editor lifecycle actions
+### powerupEditorCreateSlot -- action key to request a new slot payload be created
+### powerupEditorEditSlot -- action key to request a slot payload update
+### powerupEditorDeleteSlot -- action key to request slot removal from the editor state
+### powerupEditorOpenCard -- action key to announce that a slot card should be opened in the editor UI
+
+## signals
+### None
+
+
+# quickflux/PowerupEditorAction.qml
+## File details
+Singleton `ActionCreator` façade that normalizes legacy slot payload structures and dispatches powerup editor lifecycle actions through QuickFlux.
+
+## Functions
+### createSlot(slotId, slotState, metadata) -- merges slot arrays with derived metadata, dispatching the create lifecycle event
+### editSlot(slotId, slotState, metadata) -- emits an edit lifecycle event with normalized slot payload data
+### deleteSlot(slotId, metadata) -- dispatches a delete lifecycle event scoped to the provided slot id
+### openCard(slotId, metadata) -- announces that a slot card should become active without mutating slot payload arrays
+
+## Properties
+### structuralCloner -- helper object that deeply clones JSON-compatible data structures prior to dispatching
+### actionRegistry -- central registry exposing namespaced action keys and lifecycle helpers
+### directiveComposer -- metadata composer that derives lifecycle descriptors for payload annotations
+### payloadComposer -- normalizes slot payload arrays and merges directive metadata for dispatcher consumption
+### dispatchRelay -- abstraction over `AppDispatcher.dispatch()` that emits QuickFlux actions
 
 ## signals
 ### None
