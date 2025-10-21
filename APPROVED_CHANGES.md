@@ -1,6 +1,6 @@
 # Change 1 - Pure QML Powerup Editor QuickFlux Action
 ## Status
-- Approved
+- WIP
 
 ## Context
 - Recent AGENTS.md updates reaffirm the requirement to drive new work through PLAN.md with tightly scoped implementation steps.
@@ -17,3 +17,4 @@
 
 ## Status History
 - Approved (Change 1) — awaiting implementation kickoff.
+- WIP (Change 1) — QuickFlux action namespace scaffolded for slot lifecycle events.

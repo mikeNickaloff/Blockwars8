@@ -44,5 +44,12 @@ KeyTable {
     property string modifyBlockHealth: "modifyBlockHealth"
 
     property string setActiveGrid: "setActiveGrid"
+
+    // Powerup editor lifecycle namespace
+    property string powerupEditorNamespace: "powerupEditor"
+    property string powerupEditorCreateSlot: powerupEditorNamespace + ".createSlot"
+    property string powerupEditorEditSlot: powerupEditorNamespace + ".editSlot"
+    property string powerupEditorDeleteSlot: powerupEditorNamespace + ".deleteSlot"
+    property string powerupEditorOpenCard: powerupEditorNamespace + ".openCard"
     }
 
