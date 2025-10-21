@@ -1,7 +1,7 @@
 ﻿import QtQuick 2.0
 import QuickFlux 1.1
 import "../actions"
-import QtQuick.LocalStorage 2.15
+import "../models"
 
 Store {
     id: rootStore
@@ -9,6 +9,7 @@ Store {
     property var my_powerup_data: {
         "0": {
             "slot": 0,
+            "name": "Powerup Slot 1",
             "target": "opponent_grid",
             "amount": 9,
             "hero_targets": 1,
@@ -24,6 +25,7 @@ Store {
         },
         "1": {
             "slot": 1,
+            "name": "Powerup Slot 2",
             "target": "grid",
             "amount": 7,
             "hero_targets": 1,
@@ -35,6 +37,7 @@ Store {
         },
         "2": {
             "slot": 2,
+            "name": "Powerup Slot 3",
             "target": "grid",
             "amount": 9,
             "hero_targets": 1,
@@ -50,6 +53,7 @@ Store {
         },
         "3": {
             "slot": 3,
+            "name": "Powerup Slot 4",
             "target": "opponent_grid",
             "amount": 9,
             "hero_targets": 1,
@@ -208,6 +212,194 @@ Store {
             "type": "blocks"
         }]
 
+    SQLDataStorage {
+        id: localPowerupDataStorage
+        table: "localPowerupData"
+        columnDefinitions: ({
+            index: "INTEGER PRIMARY KEY",
+            name: "TEXT NOT NULL",
+            assignments: "TEXT",
+            data: "TEXT"
+        })
+    }
+
+    QtObject {
+        id: powerupPersistence
+        property alias storage: localPowerupDataStorage
+
+        function hasOwn(container, key) {
+            if (!container) {
+                return false
+            }
+            if (container.hasOwnProperty) {
+                return container.hasOwnProperty(key)
+            }
+            return true
+        }
+
+        function defaultNameForSlot(slotIndex) {
+            return qsTr("Powerup Slot %1").arg(slotIndex + 1)
+        }
+
+        function assignmentKeysForSlot(slotIndex) {
+            return ["SinglePlayerSlot" + (slotIndex + 1), "MultiplayerSlot" + (slotIndex + 1)]
+        }
+
+        function slotIndexFromAssignment(assignment) {
+            if (!assignment || typeof assignment !== "string") {
+                return null
+            }
+            var single = assignment.match(/SinglePlayerSlot(\d+)/)
+            if (single && single.length > 1) {
+                return Math.max(0, parseInt(single[1], 10) - 1)
+            }
+            var multi = assignment.match(/MultiplayerSlot(\d+)/)
+            if (multi && multi.length > 1) {
+                return Math.max(0, parseInt(multi[1], 10) - 1)
+            }
+            return null
+        }
+
+        function cloneData(payload) {
+            if (!payload || typeof payload !== "object") {
+                return {}
+            }
+            try {
+                return JSON.parse(JSON.stringify(payload))
+            } catch (error) {
+                console.error("[RootStore] Failed to clone powerup payload:", error)
+                return {}
+            }
+        }
+
+        function normalizeSlot(sourceKey, payload) {
+            if (payload && typeof payload.slot === "number") {
+                return payload.slot
+            }
+            if (payload && typeof payload.slot === "string") {
+                var parsedFromPayload = parseInt(payload.slot, 10)
+                if (!isNaN(parsedFromPayload)) {
+                    return parsedFromPayload
+                }
+            }
+            var parsed = parseInt(sourceKey, 10)
+            if (!isNaN(parsed)) {
+                return parsed
+            }
+            return 0
+        }
+
+        function interpretEntry(entrySource) {
+            if (entrySource === null || entrySource === undefined) {
+                return {}
+            }
+            if (Array.isArray(entrySource)) {
+                if (entrySource.length === 0) {
+                    return {}
+                }
+                return interpretEntry(entrySource[0])
+            }
+            if (typeof entrySource === "object") {
+                return cloneData(entrySource)
+            }
+            return {}
+        }
+
+        function enrichEntry(entry, slotIndex) {
+            var result = cloneData(entry)
+            result.slot = slotIndex
+            if (!result.name || result.name === "") {
+                result.name = defaultNameForSlot(slotIndex)
+            }
+            return result
+        }
+
+        function normalize(rawData) {
+            var normalizedMap = {}
+            var processEntry = function (sourceKey, value) {
+                var entry = interpretEntry(value)
+                if (!entry || Object.keys(entry).length === 0) {
+                    return
+                }
+                var slotIndex = normalizeSlot(sourceKey, entry)
+                normalizedMap[slotIndex] = enrichEntry(entry, slotIndex)
+            }
+            if (!rawData) {
+                return normalizedMap
+            }
+            if (Array.isArray(rawData)) {
+                for (var idx = 0; idx < rawData.length; ++idx) {
+                    processEntry(idx, rawData[idx])
+                }
+            } else if (typeof rawData === "object") {
+                for (var key in rawData) {
+                    if (hasOwn(rawData, key)) {
+                        processEntry(key, rawData[key])
+                    }
+                }
+            }
+            return normalizedMap
+        }
+
+        function encode(powerupData) {
+            var normalizedMap = normalize(powerupData)
+            var rows = []
+            for (var key in normalizedMap) {
+                if (hasOwn(normalizedMap, key)) {
+                    var entry = normalizedMap[key]
+                    var slotIndex = normalizeSlot(key, entry)
+                    var record = enrichEntry(entry, slotIndex)
+                    rows.push({
+                                  index: slotIndex,
+                                  name: record.name,
+                                  assignments: storage.toHex(assignmentKeysForSlot(slotIndex)),
+                                  data: storage.toHex(record)
+                              })
+                }
+            }
+            return rows
+        }
+
+        function decode(rows) {
+            var map = {}
+            if (!rows || rows.length === 0) {
+                return map
+            }
+            for (var i = 0; i < rows.length; ++i) {
+                var row = rows[i]
+                var assignments = storage.fromHex(row.assignments)
+                var payload = storage.fromHex(row.data)
+                if (!payload || typeof payload !== "object") {
+                    continue
+                }
+                var baseSlot = normalizeSlot(row.index, payload)
+                var resolved = false
+                if (Array.isArray(assignments)) {
+                    for (var j = 0; j < assignments.length; ++j) {
+                        var slotIndex = slotIndexFromAssignment(assignments[j])
+                        if (slotIndex === null) {
+                            continue
+                        }
+                        var resolvedEntry = enrichEntry(payload, slotIndex)
+                        if (row.name) {
+                            resolvedEntry.name = row.name
+                        }
+                        map[slotIndex] = resolvedEntry
+                        resolved = true
+                    }
+                }
+                if (!resolved) {
+                    var fallbackEntry = enrichEntry(payload, baseSlot)
+                    if (row.name) {
+                        fallbackEntry.name = row.name
+                    }
+                    map[baseSlot] = fallbackEntry
+                }
+            }
+            return map
+        }
+    }
+
     Component.onCompleted: {
         loadPowerupData()
     }
@@ -217,258 +409,24 @@ Store {
     }
 
     function loadPowerupData() {
-        var db = LocalStorage.openDatabaseSync("block.wars", "1.0",
-                                               "Block Wars User Settings",
-                                               1000000)
-        var rs
-        db.transaction(function (tx) {
-            // Create the database if it doesn't already exist
-            // tx.executeSql('DROP TABLE game_data')
-            tx.executeSql(
-                        'CREATE TABLE IF NOT EXISTS powerup_data(slot numeric, target text, hero_targets numeric, amount numeric, grid_targets text)')
-
-            // Add (another) greeting row
-            //  tx.executeSql('INSERT INTO Greeting VALUES(?, ?)', [ 'hello', 'world' ]);
-
-            // Show all added greetings
-            rs = tx.executeSql(
-                        'SELECT slot,target,hero_targets,amount,grid_targets from powerup_data')
-            console.log(JSON.stringify(rs))
-            if (Object.keys(rs.rows).length > 0) {
-                var newData = {}
-                for (var i = 0; i < rs.rows.length; i++) {
-                    var row = rs.rows.item(i)
-                    newData[row.slot] = {
-                        "slot": row.slot,
-                        "target": row.target,
-                        "hero_targets": row.hero_targets,
-                        "amount": row.amount,
-                        "grid_targets": JSON.parse(row.grid_targets)
-                    }
-                }
-                my_powerup_data = newData
-            }
-        })
+        var rows = localPowerupDataStorage.selectAll()
+        if (!rows || rows.length === 0) {
+            return
+        }
+        var decoded = powerupPersistence.decode(rows)
+        if (Object.keys(decoded).length > 0) {
+            my_powerup_data = decoded
+        }
     }
 
     function savePowerupData() {
-        var db = LocalStorage.openDatabaseSync("block.wars", "1.0",
-                                               "Block Wars User Settings",
-                                               1000000)
-
-        db.transaction(function (tx) {
-            // Create the database if it doesn't already exist
-            tx.executeSql(
-                        'CREATE TABLE IF NOT EXISTS powerup_data(slot numeric primary key, target text, hero_targets numeric, amount numeric, grid_targets text)')
-            tx.executeSql('DELETE from powerup_data')
-
-            // Iterating over each powerup data and saving it to the database
-            for (var slot in my_powerup_data) {
-                var powerup = my_powerup_data[slot]
-                tx.executeSql(
-                            'INSERT OR REPLACE INTO powerup_data(slot, target, hero_targets, amount, grid_targets) VALUES (?, ?, ?, ?, ?)',
-                            [powerup.slot, powerup.target, powerup.hero_targets, powerup.amount, compressData(
-                                 powerup.grid_targets)])
-            }
-        })
+        var rows = powerupPersistence.encode(my_powerup_data)
+        localPowerupDataStorage.replaceAll(rows)
     }
 
-    function compressData(grid_targets) {
-        let result = ""
-        var _grid_targets = []
-        if (grid_targets == null) {
-
-            _grid_targets = [{
-                                 "selected": false,
-                                 "row": 0,
-                                 "col": 0
-                             }, {
-                                 "selected": false,
-                                 "row": 0,
-                                 "col": 1
-                             }, {
-                                 "selected": false,
-                                 "row": 0,
-                                 "col": 2
-                             }, {
-                                 "selected": false,
-                                 "row": 0,
-                                 "col": 3
-                             }, {
-                                 "selected": false,
-                                 "row": 0,
-                                 "col": 4
-                             }, {
-                                 "selected": false,
-                                 "row": 0,
-                                 "col": 5
-                             }, {
-                                 "selected": false,
-                                 "row": 1,
-                                 "col": 0
-                             }, {
-                                 "selected": false,
-                                 "row": 1,
-                                 "col": 1
-                             }, {
-                                 "selected": false,
-                                 "row": 1,
-                                 "col": 2
-                             }, {
-                                 "selected": false,
-                                 "row": 1,
-                                 "col": 3
-                             }, {
-                                 "selected": false,
-                                 "row": 1,
-                                 "col": 4
-                             }, {
-                                 "selected": false,
-                                 "row": 1,
-                                 "col": 5
-                             }, {
-                                 "selected": false,
-                                 "row": 2,
-                                 "col": 0
-                             }, {
-                                 "selected": false,
-                                 "row": 2,
-                                 "col": 1
-                             }, {
-                                 "selected": false,
-                                 "row": 2,
-                                 "col": 2
-                             }, {
-                                 "selected": false,
-                                 "row": 2,
-                                 "col": 3
-                             }, {
-                                 "selected": false,
-                                 "row": 2,
-                                 "col": 4
-                             }, {
-                                 "selected": false,
-                                 "row": 2,
-                                 "col": 5
-                             }, {
-                                 "selected": false,
-                                 "row": 3,
-                                 "col": 0
-                             }, {
-                                 "selected": false,
-                                 "row": 3,
-                                 "col": 1
-                             }, {
-                                 "selected": false,
-                                 "row": 3,
-                                 "col": 2
-                             }, {
-                                 "selected": false,
-                                 "row": 3,
-                                 "col": 3
-                             }, {
-                                 "selected": false,
-                                 "row": 3,
-                                 "col": 4
-                             }, {
-                                 "selected": false,
-                                 "row": 3,
-                                 "col": 5
-                             }, {
-                                 "selected": false,
-                                 "row": 4,
-                                 "col": 0
-                             }, {
-                                 "selected": false,
-                                 "row": 4,
-                                 "col": 1
-                             }, {
-                                 "selected": false,
-                                 "row": 4,
-                                 "col": 2
-                             }, {
-                                 "selected": false,
-                                 "row": 4,
-                                 "col": 3
-                             }, {
-                                 "selected": false,
-                                 "row": 4,
-                                 "col": 4
-                             }, {
-                                 "selected": false,
-                                 "row": 4,
-                                 "col": 5
-                             }, {
-                                 "selected": false,
-                                 "row": 5,
-                                 "col": 0
-                             }, {
-                                 "selected": false,
-                                 "row": 5,
-                                 "col": 1
-                             }, {
-                                 "selected": false,
-                                 "row": 5,
-                                 "col": 2
-                             }, {
-                                 "selected": false,
-                                 "row": 5,
-                                 "col": 3
-                             }, {
-                                 "selected": false,
-                                 "row": 5,
-                                 "col": 4
-                             }, {
-                                 "selected": false,
-                                 "row": 5,
-                                 "col": 5
-                             }]
-        } else {
-            _grid_targets = grid_targets
-        }
-        var gridTarget
-        for (var i = 0; i < 6; i++) {
-            for (var u = 0; u < 6; u++) {
-                var foundOne = false
-                for (var p = 0; p < _grid_targets.length; p++) {
-                    if (_grid_targets[p].row == i) {
-                        if (_grid_targets[p].col == u) {
-                            result += _grid_targets[p].selected ? "1" : "0"
-
-                            foundOne = true
-                            break
-                        }
-                    }
-                }
-                if (!foundOne) {
-                    result += "0"
-                }
-            }
-        }
-        return result
-    }
-
-    function decompressData(compressedStr) {
-        const parts = compressedStr.split('.')
-        const gridTargets = []
-
-        let gridString = parts.slice(4).join('')
-        for (var i = 0; i < 6; i++) {
-            for (var u = 0; u < 6; u++) {
-                gridTargets.push({
-                                     "selected": gridString[i * 6 + u] === '1',
-                                     "row": i,
-                                     "col": u
-                                 })
-            }
-        }
-
-        return {
-            "slot": parseInt(parts[0], 10),
-            "target": parts[1],
-            "amount": parseInt(parts[2], 10),
-            "hero_targets": parseInt(parts[3], 10),
-            "grid_targets": gridTargets
-        }
+    function ingestPowerupData(rawData) {
+        var normalized = powerupPersistence.normalize(rawData)
+        my_powerup_data = normalized
+        savePowerupData()
     }
 }

@@ -1,3 +1,21 @@
+# Change 2 - Reusable SQLDataStorage QML Helper
+## Status
+- Pending
+## Context
+- Persisting custom powerup metadata requires a reusable LocalStorage abstraction that aligns with upcoming QML-first flows.
+- Future scenes beyond the editor will need convenient insert/update/select helpers without duplicating imperative JavaScript.
+- Encoding arbitrary JSON payloads in hexadecimal ensures compatibility with the storage backend's text constraints.
+
+## Proposed Changes
+- Design a `SQLDataStorage.qml` type that wraps Qt Quick LocalStorage access with a configurable `table` property and lifecycle hooks to ensure schema creation.
+- Expose reusable operations (e.g., insert, update, select, selectAll) that accept structured parameter objects and normalize them into SQL statements with bound values.
+- Implement shared encoding utilities `toHex(value)` and `fromHex(value)` to translate JSON-friendly data into hexadecimal strings and back, including arrays and objects.
+- Add defensive error handling/logging to capture SQL failures without crashing the UI, returning informative results to callers.
+- Document the new helper in WHEEL.md and create TODO entries once approved for implementation.
+
+## Questions / Comments
+- Should the helper also expose transaction batching now, or defer until a concrete use case emerges?
+
 # Change 1 - Pure QML Powerup Editor QuickFlux Action
 ## Status
 - Pending
@@ -12,6 +30,7 @@
 - Implement a pure-QML powerup editor scene composed of high-level components (e.g., `PowerupEditorView.qml`, `PowerupCardView.qml`, `PowerupCatalogList.qml`) that leverage the store to render a selectable list of user-defined powerups and display one card at a time with full detail controls.
 - Ensure card interactions (grid toggles, metadata fields, energy calculations) delegate to reusable helper objects or abstract QML types instead of inline handlers, aligning with the architectural guidance in AGENTS.md.
 - Provide navigation and lifecycle hooks so QuickFlux actions drive dialog visibility, card selection, and persistence, keeping the data contract identical to the existing JSON structure for compatibility with other systems.
+- Persist created/edited `PowerupData` entries into a `localPowerupData` LocalStorage table through the forthcoming `SQLDataStorage.qml`, encoding `assignments` and `data` JSON payloads via the helper's `toHex()`/`fromHex()` utilities and maintaining slot assignment arrays (`SinglePlayerSlot1`…`MultiplayerSlot4`).
 - Update supporting documentation files (PLAN.md status changes, APPROVED_CHANGES.md entries, TODO.md tasks, WHEEL.md summaries) once the implementation proceeds beyond planning.
 
 ## Questions / Comments

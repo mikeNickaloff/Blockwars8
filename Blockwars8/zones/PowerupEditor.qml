@@ -20,7 +20,7 @@ Rectangle {
     PowerupEditorDialog {
         id: powerupEditorDialog
         onSignal_powerups_saved: {
-            MainStore.my_powerup_data = powerup_data
+            MainStore.ingestPowerupData(powerup_data)
             AppActions.enterZoneMainMenu()
         }
         onSignalPowerupsLoaded: {

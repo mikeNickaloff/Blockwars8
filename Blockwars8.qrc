@@ -13,6 +13,7 @@
         <file>Blockwars8/zones/PowerupEditor.qml</file>
         <file>Blockwars8/zones/SinglePlayer.qml</file>
         <file>Blockwars8/models/GridModel.qml</file>
+        <file>Blockwars8/models/SQLDataStorage.qml</file>
         <file>Blockwars8/zones/FindMatch.qml</file>
         <file>Blockwars8/controllers/GridController.qml</file>
         <file>Blockwars8/elements/GameGrid.qml</file>
