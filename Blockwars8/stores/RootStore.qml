@@ -216,7 +216,7 @@ Store {
         id: localPowerupDataStorage
         table: "localPowerupData"
         columnDefinitions: ({
-            index: "INTEGER PRIMARY KEY",
+            id: "INTEGER PRIMARY KEY",
             name: "TEXT NOT NULL",
             assignments: "TEXT",
             data: "TEXT"
