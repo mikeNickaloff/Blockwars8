@@ -6,83 +6,47 @@ Item {
     id: mainWindow
     signal changeZone(var new_zone)
 
-    width: parent ? parent.width : 480
-    height: parent ? parent.height : 640
-
     ColumnLayout {
         id: mainMenu
-        anchors.fill: parent
-        anchors.margins: mainWindow.width * 0.05
-        spacing: mainWindow.height * 0.03
+        width: mainWindow.width * 0.75
+        height: mainWindow.height * 0.75
+        anchors.centerIn: parent
 
-        Item {
+        Button {
+            id: soloPlayButton
+            text: "Solo Play"
             Layout.fillWidth: true
-            Layout.preferredHeight: mainWindow.height * 0.2
-
-            Text {
-                id: titleText
-                text: "Block Wars"
-                anchors.centerIn: parent
-                font.pixelSize: Math.round(parent.height * 0.5)
-                font.bold: true
+            Layout.preferredHeight: mainMenu.height / 4
+            onClicked: {
+                changeZone("single_player")
             }
         }
 
-        Item {
+        Button {
+            id: multiplayerButton
+            text: "Multiplayer"
             Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: mainMenu.height * 0.02
-
-                Button {
-                    id: singlePlayerButton
-                    text: "Single Player"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: mainMenu.height * 0.12
-                    onClicked: {
-                        changeZone("single_player")
-                    }
-                }
-
-                Button {
-                    id: multiplayerButton
-                    text: "Multiplayer"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: mainMenu.height * 0.12
-                    onClicked: {
-                        changeZone("find_match")
-                    }
-                }
-
-                Button {
-                    id: powerupEditorButton
-                    text: "Powerup Editor"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: mainMenu.height * 0.12
-                    onClicked: {
-                        changeZone("powerup_editor")
-                    }
-                }
-
-                Button {
-                    id: optionsButton
-                    text: "Options"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: mainMenu.height * 0.12
-                    onClicked: {
-                        changeZone("options")
-                    }
-                }
-
-                Button {
-                    id: exitButton
-                    text: "Exit"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: mainMenu.height * 0.12
-                }
+            Layout.preferredHeight: mainMenu.height / 4
+            onClicked: {
+                changeZone("find_match")
             }
+        }
+
+        Button {
+            id: powerupEditorButton
+            text: "Powerup Editor"
+            Layout.fillWidth: true
+            Layout.preferredHeight: mainMenu.height / 4
+            onClicked: {
+                changeZone("powerup_editor")
+            }
+        }
+
+        Button {
+            id: exitButton
+            text: "Exit"
+            Layout.fillWidth: true
+            Layout.preferredHeight: mainMenu.height / 4
         }
     }
 }

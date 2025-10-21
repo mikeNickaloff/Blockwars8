@@ -1,7 +1,6 @@
 ﻿import QtQuick 2.12
 import QtQuick.Controls 2.5
 import QtQuick.Layouts 1.3
-import QtQml 2.15
 import QtQml.Models 2.15
 import "../models"
 import QtMultimedia 5.5
@@ -15,9 +14,9 @@ import QtQuick.LocalStorage 2.15
 import "../controllers" 1.0
 import "../elements" 1.0
 import "../components" 1.0
+import "../components/components.js" as JS
 import QtQuick.Particles 2.0
 import "." 1.0
-import com.blockwars 1.0
 
 Item {
     id: gridRoot
@@ -30,593 +29,13 @@ Item {
     property var grid_id: 0
 
     property var current_event
-    property int animationCount: 0
+    property var animationCount: 0
     property var grid_blocks: []
-    property int launchCount: 0
-    property var matchList: []
-    property var incomingBlocks: []
-    property string gridState: "idle"
-    property bool initialFill: true
-    property bool activeTurn: true
-    property int turns: 3
-    property int fillDirection: 1
-    property int verticalDirection: 1
-    property bool damageCompactQueued: false
-    property bool cascadesEnabled: true
-    property bool launchOnMatchEnabled: true
-    property bool pendingCascade: false
-    property string pendingCascadeReason: "resume"
-    property int pool_index: Math.floor(Math.random() * 1000)
-    property var deployedTiles: ({})
-
-    signal gridSettled(var info)
-
-    Component.onCompleted: {
-        verticalDirection = fillDirection < 0 ? -1 : 1
-        grid_blocks = new Array(maxIndex)
-        for (var i = 0; i < maxIndex; ++i) {
-            grid_blocks[i] = null
-        }
-        deployedTiles = ({})
-    }
-
-    onFillDirectionChanged: {
-        verticalDirection = fillDirection < 0 ? -1 : 1
-    }
-
-    Timer {
-        id: fillTimer
-        interval: 60
-        repeat: true
-        running: false
-        triggeredOnStart: false
-        onTriggered: processFillStep()
-    }
-
-    Timer {
-        id: compactTimer
-        interval: 45
-        repeat: true
-        running: false
-        triggeredOnStart: false
-        onTriggered: processCompactStep()
-    }
-
-    Timer {
-        id: matchTimer
-        interval: 70
-        repeat: true
-        running: false
-        triggeredOnStart: false
-        onTriggered: processMatchStep()
-    }
-
-    Timer {
-        id: launchTimer
-        interval: 55
-        repeat: true
-        running: false
-        triggeredOnStart: false
-        onTriggered: processLaunchStep()
-    }
-
-    function resetStateTimers() {
-        fillTimer.stop()
-        compactTimer.stop()
-        matchTimer.stop()
-        launchTimer.stop()
-    }
-
-    function logStateChange(nextState, reason) {
-        if (gridState === nextState) {
-            return
-        }
-        console.debug("Grid", grid_id, "state", gridState, "->", nextState,
-                      reason ? ("reason:" + reason) : "")
-        gridState = nextState
-    }
-
-    function setGridState(nextState, reason) {
-        var previous = gridState
-        if (previous === nextState) {
-            return
-        }
-        if (!cascadesEnabled && nextState !== "idle") {
-            gridState = "idle"
-            return
-        }
-        resetStateTimers()
-        logStateChange(nextState, reason)
-        switch (gridState) {
-        case "fill":
-            fillTimer.start()
-            Qt.callLater(processFillStep)
-            break
-        case "compact":
-            compactTimer.start()
-            Qt.callLater(processCompactStep)
-            break
-        case "match":
-            matchTimer.start()
-            Qt.callLater(processMatchStep)
-            break
-        case "launch":
-            launchTimer.start()
-            Qt.callLater(processLaunchStep)
-            break
-        default:
-            break
-        }
-    }
-
-    function frontRowIndex() {
-        return verticalDirection === 1 ? 0 : maxRow - 1
-    }
-
-    function spawnRowIndex() {
-        return frontRowIndex() - verticalDirection
-    }
-
-    function nextRowIndex(row) {
-        return row + verticalDirection
-    }
-
-    function rowWithinBounds(row) {
-        return row >= 0 && row < maxRow
-    }
-
-    function getBlock(row, column) {
-        if (!rowWithinBounds(row) || column < 0 || column >= maxColumn) {
-            return null
-        }
-        return grid_blocks[index(row, column)] || null
-    }
-
-    function setBlockAt(row, column, blk) {
-        if (!rowWithinBounds(row) || column < 0 || column >= maxColumn) {
-            return
-        }
-        grid_blocks[index(row, column)] = blk
-    }
-
-    function clearBlockAt(row, column) {
-        if (!rowWithinBounds(row) || column < 0 || column >= maxColumn) {
-            return
-        }
-        grid_blocks[index(row, column)] = null
-    }
-
-    function hasAnimatingBlocks() {
-        for (var i = 0; i < grid_blocks.length; ++i) {
-            var blk = grid_blocks[i]
-            if (!blk) {
-                continue
-            }
-            if (blk.inAnimation) {
-                return true
-            }
-        }
-        for (var j = 0; j < incomingBlocks.length; ++j) {
-            var pending = incomingBlocks[j]
-            if (pending && pending.block && pending.block.inAnimation) {
-                return true
-            }
-        }
-        return false
-    }
-
-    function get_next_random_color() {
-        pool_index++
-        var palette = ["red", "green", "blue", "yellow"]
-        var selector = blockPool.randomNumber(pool_index)
-        var idx = Math.abs(selector) % palette.length
-        return palette[idx]
-    }
-
-    function isPowerupTile(obj) {
-        return obj && Qt.isQtObject(obj) && obj.objectName === "PowerupTile"
-    }
-
-    function requestColumnFill(column) {
-        AppActions.createOneBlock(grid_id, spawnRowIndex(), column)
-    }
-
-    function promoteIncomingBlocks() {
-        if (incomingBlocks.length === 0) {
-            return
-        }
-        var targetRow = frontRowIndex()
-        var blkW = Math.floor(gridRoot.width / maxColumn)
-        var blkH = Math.floor(gridRoot.height / maxRow)
-        for (var i = 0; i < incomingBlocks.length; ++i) {
-            var entry = incomingBlocks[i]
-            if (!entry || !entry.block) {
-                continue
-            }
-            var blk = entry.block
-            var column = entry.column
-            blk.column = column
-            blk.row = targetRow
-            blk.y = blkH * targetRow
-            setBlockAt(targetRow, column, blk)
-        }
-        incomingBlocks = []
-    }
-
-    function processFillStep() {
-        if (!cascadesEnabled) {
-            return
-        }
-        if (gridState !== "fill") {
-            return
-        }
-        if (incomingBlocks.length > 0 && !hasAnimatingBlocks()) {
-            promoteIncomingBlocks()
-        }
-        if (hasAnimatingBlocks()) {
-            return
-        }
-        var targetRow = frontRowIndex()
-        var columnsToFill = []
-        for (var c = 0; c < maxColumn; ++c) {
-            if (!getBlock(targetRow, c)) {
-                columnsToFill.push(c)
-            }
-        }
-        if (columnsToFill.length === 0) {
-            if (hasEmptyCells()) {
-                setGridState("compact", "fillNeedsCompact")
-            } else {
-                setGridState("match", "fillComplete")
-            }
-            return
-        }
-        for (var i = 0; i < columnsToFill.length; ++i) {
-            requestColumnFill(columnsToFill[i])
-        }
-    }
-
-    function processCompactStep() {
-        if (!cascadesEnabled) {
-            return
-        }
-        if (gridState !== "compact") {
-            return
-        }
-        if (hasAnimatingBlocks()) {
-            return
-        }
-        var moved = false
-        var cellHeight = Math.floor(gridRoot.height / maxRow)
-        for (var col = 0; col < maxColumn; ++col) {
-            var entries = []
-            for (var row = 0; row < maxRow; ++row) {
-                var blk = getBlock(row, col)
-                if (blk) {
-                    entries.push({
-                                      "row": row,
-                                      "block": blk
-                                  })
-                }
-                clearBlockAt(row, col)
-            }
-            if (entries.length === 0) {
-                continue
-            }
-            if (verticalDirection === 1) {
-                var target = maxRow - 1
-                for (var i = entries.length - 1; i >= 0; --i) {
-                    var downBlk = entries[i].block
-                    if (downBlk.row !== target) {
-                        moved = true
-                    }
-                    downBlk.row = target
-                    downBlk.y = cellHeight * target
-                    setBlockAt(target, col, downBlk)
-                    target -= 1
-                }
-            } else {
-                var upTarget = 0
-                for (var j = 0; j < entries.length; ++j) {
-                    var upBlk = entries[j].block
-                    if (upBlk.row !== upTarget) {
-                        moved = true
-                    }
-                    upBlk.row = upTarget
-                    upBlk.y = cellHeight * upTarget
-                    setBlockAt(upTarget, col, upBlk)
-                    upTarget += 1
-                }
-            }
-        }
-
-        if (!moved) {
-            setGridState("fill", "compactComplete")
-        }
-    }
-
-    function notifyCascadeEnded(reason) {
-        AppActions.cascadeEnded({
-                                     "grid_id": grid_id,
-                                     "reason": reason
-                                 })
-    }
-
-    function emitGridSettled(reason) {
-        var info = {
-            "grid_id": grid_id,
-            "state": gridState,
-            "reason": reason,
-            "has_empty": hasEmptyCells(),
-            "initial_fill": initialFill
-        }
-        AppActions.gridSettled(info)
-        gridSettled(info)
-    }
-
-    function beginFillCycle(reason) {
-        pendingCascadeReason = reason || "beginFill"
-        if (!cascadesEnabled) {
-            pendingCascade = true
-            return
-        }
-        pendingCascade = false
-        matchList = []
-        launchCount = 0
-        incomingBlocks = []
-        setGridState("compact", pendingCascadeReason)
-    }
-
-    function resumeCascadeIfNeeded() {
-        if (!cascadesEnabled) {
-            return
-        }
-        if (damageCompactQueued) {
-            damageCompactQueued = false
-            AppActions.enqueueGridEvent("shuffleDown", grid_id, {
-                                            "source_event": "resume"
-                                        })
-        }
-        if ((pendingCascade || hasEmptyCells()) && gridState === "idle" && !hasAnimatingBlocks()) {
-            pendingCascade = false
-            AppActions.beginFillCycle(grid_id, pendingCascadeReason || "resume")
-        }
-    }
-
-    function handlePowerupDeployment(data) {
-        if (!data || data.grid_id !== grid_id) {
-            return
-        }
-        var row = data.row !== undefined ? data.row : -1
-        var column = data.column !== undefined ? data.column : -1
-        var slotId = data.slot_id !== undefined ? data.slot_id : -1
-        if (!cascadesEnabled || hasAnimatingBlocks()) {
-            AppActions.confirmPowerupDeployment({
-                                                    "grid_id": grid_id,
-                                                    "slot_id": slotId,
-                                                    "success": false
-                                                })
-            return
-        }
-        if (!rowWithinBounds(row) || column < 0 || column + 1 >= maxColumn || slotId < 0) {
-            AppActions.confirmPowerupDeployment({
-                                                    "grid_id": grid_id,
-                                                    "slot_id": slotId,
-                                                    "success": false
-                                                })
-            return
-        }
-        var cells = [column, column + 1]
-        for (var i = 0; i < cells.length; ++i) {
-            var existing = getBlock(row, cells[i])
-            if (isPowerupTile(existing)) {
-                AppActions.confirmPowerupDeployment({
-                                                        "grid_id": grid_id,
-                                                        "slot_id": slotId,
-                                                        "success": false
-                                                    })
-                return
-            }
-        }
-        var cellWidth = Math.floor(gridRoot.width / maxColumn)
-        var cellHeight = Math.floor(gridRoot.height / maxRow)
-        for (var j = 0; j < cells.length; ++j) {
-            var blockObj = getBlock(row, cells[j])
-            if (blockObj && Qt.isQtObject(blockObj)) {
-                blockObj.destroy()
-            }
-            setBlockAt(row, cells[j], null)
-        }
-        var tileColor = data.color ? resolveBlockColor(data.color) : "#888896"
-        var tileMaxHealth = data.maxHealth !== undefined ? data.maxHealth : 0
-        if (!tileMaxHealth || tileMaxHealth <= 0) {
-            var impliedAmount = data.amount !== undefined ? Math.abs(data.amount) : 0
-            tileMaxHealth = Math.max(1, impliedAmount)
-        }
-        var tile = powerupTileComponent.createObject(gridRoot, {
-                                                        "x": Qt.binding(function() { return (gridRoot.width / maxColumn) * column; }),
-                                                        "y": Qt.binding(function() { return (gridRoot.height / maxRow) * row; }),
-                                                        "width": Qt.binding(function() { return (gridRoot.width / maxColumn) * 2; }),
-                                                        "height": Qt.binding(function() { return gridRoot.height / maxRow; }),
-                                                        "colorName": tileColor,
-                                                        "gridId": grid_id,
-                                                        "slotId": slotId,
-                                                        "displayName": data.displayName !== undefined ? data.displayName : "Powerup"
-                                                    })
-        if (!tile) {
-            AppActions.confirmPowerupDeployment({
-                                                    "grid_id": grid_id,
-                                                    "slot_id": slotId,
-                                                    "success": false
-                                                })
-            return
-        }
-        tile.row = row
-        tile.column = column
-        tile.rightColumn = column + 1
-        tile.maxHealth = tileMaxHealth
-        tile.health = tileMaxHealth
-        setBlockAt(row, column, tile)
-        setBlockAt(row, column + 1, tile)
-        deployedTiles[String(slotId)] = tile
-        cleanupBlocks()
-        AppActions.confirmPowerupDeployment({
-                                                "grid_id": grid_id,
-                                                "slot_id": slotId,
-                                                "row": row,
-                                                "column": column,
-                                                "success": true
-                                            })
-        AppActions.powerupEnergyReset(grid_id, slotId)
-        AppActions.activatePowerup(slotId, grid_id)
-        AppActions.enqueueGridEvent("checkMatches", grid_id, {
-                                        "source_event": "powerupPlaced"
-                                    })
-    }
-
-    function getBlockHealthObject(row, column) {
-        var blk = getBlock(row, column)
-        if (!blk) {
-            return null
-        }
-        if (isPowerupTile(blk)) {
-            return blk
-        }
-        if (blk.objectName === "Block") {
-            return blk
-        }
-        return null
-    }
-
-    function applyBlocksEffect(effect) {
-        var cells = effect.cells || []
-        var amount = effect.amount !== undefined ? effect.amount : 0
-        if (cells.length === 0 || amount === 0) {
-            return
-        }
-        var mode = effect.mode || "damage"
-        var isHeal = mode === "heal"
-        var processedTiles = {}
-        for (var i = 0; i < cells.length; ++i) {
-            var cell = cells[i]
-            if (!cell) {
-                continue
-            }
-            var row = cell.row
-            var column = cell.column
-            if (!rowWithinBounds(row) || column < 0 || column >= maxColumn) {
-                continue
-            }
-            var obj = getBlockHealthObject(row, column)
-            if (!obj) {
-                continue
-            }
-            if (isPowerupTile(obj)) {
-                var slotKey = String(obj.slotId)
-                if (processedTiles[slotKey]) {
-                    continue
-                }
-                processedTiles[slotKey] = true
-                var delta = isHeal ? amount : -amount
-                AppActions.applyPowerupCardHealth({
-                                                    "grid_id": grid_id,
-                                                    "slot_id": obj.slotId,
-                                                    "amount": delta
-                                                })
-                continue
-            }
-            var currentBlockHealth = obj.block_health !== undefined ? obj.block_health : 0
-            var newBlockHealth = isHeal ? (currentBlockHealth + amount) : (currentBlockHealth - amount)
-            AppActions.modifyBlockHealth(row, column, grid_id, newBlockHealth)
-        }
-    }
-
-    function adjustPowerupCardHealth(data) {
-        var slotId = data.slot_id
-        if (slotId === undefined || slotId === null) {
-            return
-        }
-        var tile = deployedTiles[String(slotId)]
-        if (!tile) {
-            return
-        }
-        var delta = data.amount !== undefined ? data.amount : 0
-        if (delta === 0) {
-            return
-        }
-        var updatedHealth = tile.health + delta
-        if (tile.maxHealth && tile.maxHealth > 0 && updatedHealth > tile.maxHealth) {
-            updatedHealth = tile.maxHealth
-        }
-        tile.health = Math.max(0, updatedHealth)
-    }
-
-    function processMatchStep() {
-        if (!cascadesEnabled) {
-            return
-        }
-        if (gridState !== "match") {
-            return
-        }
-        if (hasAnimatingBlocks()) {
-            return
-        }
-        if (hasEmptyCells()) {
-            setGridState("compact", "matchFoundEmpty")
-            return
-        }
-        if (!launchOnMatchEnabled) {
-            pendingCascade = true
-            setGridState("idle", "launchDisabled")
-            return
-        }
-        matchList = collectMatches().map(function (entry) {
-            entry.block = getBlock(entry.row, entry.column)
-            return entry
-        }).filter(function (entry) {
-            return entry.block !== null
-        })
-        if (matchList.length === 0) {
-            setGridState("idle", "noMatches")
-            if (initialFill) {
-                initialFill = false
-            }
-            emitGridSettled("noMatches")
-            notifyCascadeEnded("noMatches")
-            return
-        }
-        launchCount = 0
-        setGridState("launch", "matchesFound")
-    }
-
-    function processLaunchStep() {
-        if (!cascadesEnabled || !launchOnMatchEnabled) {
-            return
-        }
-        if (gridState !== "launch") {
-            return
-        }
-        if (matchList.length === 0) {
-            if (launchCount <= 0) {
-                setGridState("compact", "launchesFinished")
-            }
-            return
-        }
-        var pending = matchList.shift()
-        if (!pending) {
-            Qt.callLater(processLaunchStep)
-            return
-        }
-        var blk = getBlock(pending.row, pending.column)
-        if (!blk) {
-            Qt.callLater(processLaunchStep)
-            return
-        }
-        blk.launchDirection = verticalDirection
-        clearBlockAt(pending.row, pending.column)
-        blk.launch()
-        launchCount += 1
-    }
+    property var launchCount: 0
+    property var launchList: []
+    property var initialFill: true
+    property var activeTurn: true
+    property var turns: 3
 
     ParticleSystem {
         id: particleSystem
@@ -633,185 +52,6 @@ Item {
         return column + (row * maxColumn)
     }
 
-    function resolveBlockColor(value) {
-        if (value === undefined || value === null) {
-            return "red"
-        }
-        if (typeof value === "string") {
-            return value
-        }
-        var palette = ["red", "blue", "yellow", "green"]
-        var idx = Math.abs(value) % palette.length
-        switch (value) {
-        case 0:
-            return "red"
-        case 1:
-            return "blue"
-        case 2:
-            return "yellow"
-        case 3:
-            return "green"
-        default:
-            return palette[idx]
-        }
-    }
-
-    function isCellEmpty(row, column) {
-        if (row < 0 || column < 0 || row >= maxRow || column >= maxColumn) {
-            return false
-        }
-        var idx = index(row, column)
-        var blk = grid_blocks[idx]
-        if (!blk) {
-            return true
-        }
-        if (!Qt.isQtObject(blk)) {
-            grid_blocks[idx] = null
-            return true
-        }
-        if (blk.objectName !== "Block" && !isPowerupTile(blk)) {
-            return true
-        }
-        return false
-    }
-
-    function firstAvailableRow(column, preferredRow) {
-        if (preferredRow !== undefined && preferredRow !== null) {
-            if (preferredRow >= 0 && preferredRow < maxRow && isCellEmpty(preferredRow, column)) {
-                return preferredRow
-            }
-        }
-        for (var r = 0; r < maxRow; ++r) {
-            if (isCellEmpty(r, column)) {
-                return r
-            }
-        }
-        return -1
-    }
-
-    function instantiateBlock(row, column, colorValue, options) {
-        var register = !options || options.register !== false
-        if (column < 0 || column >= maxColumn) {
-            return null
-        }
-        if (register) {
-            if (!rowWithinBounds(row)) {
-                return null
-            }
-            if (!isCellEmpty(row, column)) {
-                return null
-            }
-        }
-
-        var blkW = Math.floor(gridRoot.width / maxColumn)
-        var blkH = Math.floor(gridRoot.height / maxRow)
-        var startY = blkH * row
-        var colorName = resolveBlockColor(colorValue)
-
-        var blk = blockComponent.createObject(gridRoot, {
-                                                  "x": blkW * column,
-                                                  "y": startY,
-                                                  "row": row,
-                                                  "column": column,
-                                                  "width": blkW,
-                                                  "height": blkH,
-                                                  "block_color": colorName,
-                                                  "grid_id": grid_id,
-                                                  "launchDirection": verticalDirection
-                                              })
-        if (!blk) {
-            return null
-        }
-
-        blk.row = row
-        blk.column = column
-
-        blk.animationStart.connect(handleBlockAnimationStartEvent)
-        blk.animationDone.connect(handleBlockAnimationDoneEvent)
-        blk.rowUpdated.connect(updateBlocks)
-        blk.rowUpdated.connect(repositionGridBlocks)
-
-        if (register) {
-            setBlockAt(row, column, blk)
-        }
-        blk.y = blkH * row
-        return blk
-    }
-
-    function recordMatch(matches, seen, row, column) {
-        var key = row + ":" + column
-        if (seen[key]) {
-            return
-        }
-        seen[key] = true
-        matches.push({
-                         "row": row,
-                         "column": column
-                     })
-    }
-
-    function collectMatches() {
-        var matches = []
-        var seen = ({})
-
-        for (var r = 0; r < maxRow; ++r) {
-            var runColor = null
-            var runStart = -1
-            var runLength = 0
-            for (var c = 0; c <= maxColumn; ++c) {
-                var blk = c < maxColumn ? grid_blocks[index(r, c)] : null
-                var color = blk ? blk.block_color : null
-                if (color && color === runColor) {
-                    runLength++
-                } else {
-                    if (runColor && runLength >= 3) {
-                        for (var cc = runStart; cc < runStart + runLength; ++cc) {
-                            recordMatch(matches, seen, r, cc)
-                        }
-                    }
-                    if (color) {
-                        runColor = color
-                        runStart = c
-                        runLength = 1
-                    } else {
-                        runColor = null
-                        runStart = -1
-                        runLength = 0
-                    }
-                }
-            }
-        }
-
-        for (var c = 0; c < maxColumn; ++c) {
-            var runColorCol = null
-            var runStartRow = -1
-            var runLen = 0
-            for (var r = 0; r <= maxRow; ++r) {
-                var blkCol = r < maxRow ? grid_blocks[index(r, c)] : null
-                var colorCol = blkCol ? blkCol.block_color : null
-                if (colorCol && colorCol === runColorCol) {
-                    runLen++
-                } else {
-                    if (runColorCol && runLen >= 3) {
-                        for (var rr = runStartRow; rr < runStartRow + runLen; ++rr) {
-                            recordMatch(matches, seen, rr, c)
-                        }
-                    }
-                    if (colorCol) {
-                        runColorCol = colorCol
-                        runStartRow = r
-                        runLen = 1
-                    } else {
-                        runColorCol = null
-                        runStartRow = -1
-                        runLen = 0
-                    }
-                }
-            }
-        }
-
-        return matches
-    }
 
     /*
      *
@@ -830,394 +70,382 @@ Item {
             }
         }
     }
-        AppListener {
-            filter: ActionTypes.blockLaunchCompleted
-            onDispatched: function (dtype, ddata) {
-                if (ddata.grid_id == grid_id) {
-                    var row = ddata.row
-                    var column = ddata.column
-                    clearBlockAt(row, column)
-                    cleanupBlocks()
-                    if (ddata.color) {
-                        AppActions.powerupEnergyDelta(grid_id, -1, ddata.color, ddata.damage !== undefined ? ddata.damage : 0, "launch")
-                    }
-                    if (launchCount > 0) {
-                        launchCount--
-                    }
-                    if (launchCount <= 0 && gridState === "launch" && matchList.length === 0) {
-                        launchCount = 0
-                        setGridState("compact", "launchCompleteAck")
-                    }
+
+    AppListener {
+        filter: ActionTypes.blockLaunchCompleted
+        onDispatched: function (dtype, ddata) {
+            if (ddata.grid_id == grid_id) {
+
+                animationCount--
+                launchCount--
+                var row = ddata.row
+                var column = ddata.column
+                //grid_blocks[index(row, column)] = null
+                //board[index(row, column)] = null
+                AppActions.gridEventDone(current_event)
+                //  launchCount--
+                console.log("Launch Completed", JSON.stringify(ddata),
+                            "launch count is", launchCount)
+                if (launchCount <= 0) {
+                    createOneShotTimer(gridRoot, (50 + (25 * 6) + (25 * 6)),
+                                       function (params) {
+                                           AppActions.enqueueGridEvent(
+                                                       "shuffleDown",
+                                                       params.grid_id, ({}))
+                                       }, {
+                                           "grid_id": grid_id
+                                       })
                 } else {
-                    var attackerGridId = ddata.grid_id
-                    var incomingDamage = ddata.damage !== undefined ? ddata.damage : 0
-                    var launchColor = ddata.color !== undefined ? ddata.color : null
-                    if (launchColor && incomingDamage > 0) {
-                        AppActions.powerupEnergyDelta(attackerGridId, -1, launchColor, incomingDamage, "launch")
-                    }
-                    if (incomingDamage <= 0) {
-                        return
-                    }
-                    var targetColumn = Math.max(0, Math.min(maxColumn - 1, (maxColumn - 1) - ddata.column))
-                    var rowIter = frontRowIndex()
-                    while (incomingDamage > 0 && rowWithinBounds(rowIter)) {
-                        var defenderBlock = getBlock(rowIter, targetColumn)
-                        if (!defenderBlock) {
-                            rowIter = nextRowIndex(rowIter)
-                            continue
+
+                }
+            } else {
+                console.log("detected block launch complete from other grid", JSON.stringify(ddata))
+                var current_healths = [];
+                var incoming_dmg = ddata.damage;
+                var current_col = 5 - ddata.column;
+                for (var u=5; u>=0; u--) {
+                    if (grid_blocks[index(u, current_col)] != null) { current_healths.push(grid_blocks[index(u, current_col)].block_health); } else { current_healths.push(0); }
+                }
+                console.log("current block healths on",current_col,current_healths);
+                var destroy_list = [];
+
+                for (u=0; u<current_healths.length; u++) {
+                if (current_healths[u] > 0) {
+                    if (incoming_dmg > 0) {
+                        var blk_health = current_healths[u];
+                        current_healths[u] -= incoming_dmg;
+                        incoming_dmg -= blk_health;
+
+
+                        if (!initialFill) {
+                            console.log("modifying block health", 5 - u,current_col,grid_id, current_healths[u])
+                            AppActions.modifyBlockHealth( 5 - u, current_col, grid_id, current_healths[u])
+                        } else {
+                            console.log("Not modifying health due to initialFill flag");
                         }
-                        var beforeHealth = defenderBlock.block_health !== undefined ? defenderBlock.block_health : 0
-                        if (beforeHealth <= 0) {
-                            rowIter = nextRowIndex(rowIter)
-                            continue
-                        }
-                        var applied = Math.min(beforeHealth, incomingDamage)
-                        incomingDamage -= applied
-                        AppActions.powerupEnergyDelta(attackerGridId, -1, defenderBlock.block_color, applied, "defenderDamage")
-                        var remaining = beforeHealth - applied
-                        AppActions.modifyBlockHealth(rowIter, targetColumn, grid_id, remaining)
-                        rowIter = nextRowIndex(rowIter)
+                        if (incoming_dmg < 1) { incoming_dmg = 0; break; }
+
+                    } else {
+                     break;
                     }
-                }
-            }
-        }
-        AppListener {
-            filter: ActionTypes.setActiveGrid
-            onDispatched: function (dtype, ddata) {
-                if (ddata.grid_id == grid_id) {
-                    activeTurn = true;
-                    turns = 3;
-                    AppActions.enableBlocks(grid_id, true)
                 } else {
-                    activeTurn = false;
-                    turns = 0;
-                    AppActions.enableBlocks(grid_id, false)
+                 continue;
                 }
+                }
+
+
             }
         }
-
-        AppListener {
-            filter: ActionTypes.modifyBlockHealth
-            onDispatched: function(dtype, data) {
-                if (!data || data.grid_id !== grid_id) {
-                    return
-                }
-                var row = data.row !== undefined ? data.row : data.r
-                var column = data.column !== undefined ? data.column : data.col
-                if (row === undefined || column === undefined) {
-                    return
-                }
-                var amount = data.amount !== undefined ? data.amount : data.health
-                if (amount === undefined) {
-                    return
-                }
-                if (amount > 0) {
-                    return
-                }
-
-                clearBlockAt(row, column)
-                cleanupBlocks()
-
-                if (!cascadesEnabled) {
-                    damageCompactQueued = true
-                    pendingCascade = true
-                    pendingCascadeReason = "damage"
-                    return
-                }
-
-                if (!damageCompactQueued) {
-                    damageCompactQueued = true
-                    AppActions.enqueueGridEvent("shuffleDown", grid_id, {
-                                                    "source_event": "damage"
-                                                })
-                }
+    }
+    AppListener {
+        filter: ActionTypes.setActiveGrid
+        onDispatched: function (dtype, ddata) {
+            if (ddata.grid_id == grid_id) {
+                activeTurn = true;
+                turns = 3;
+                AppActions.enableBlocks(grid_id, true)
+            } else {
+                activeTurn = false;
+                turns = 0;
+                AppActions.enableBlocks(grid_id, false)
             }
         }
+    }
 
-        AppListener {
-            filter: ActionTypes.setFillingEnabled
-            onDispatched: function(dtype, data) {
-                if (!data || data.grid_id !== grid_id) {
-                    return
-                }
-                cascadesEnabled = data.enabled === true
-                if (!cascadesEnabled) {
-                    resetStateTimers()
-                    gridState = "idle"
-                } else {
-                    resumeCascadeIfNeeded()
-                }
+    function handleGridEventExecute(event) {
+        var event_type = event.event_type
+        if (event_type == "shuffleDown") {
+            shuffleDown(event)
+        }
+        if (event_type == "createBlocks") {
+            createBlocks(event)
+        }
+        if (event_type == "checkMatches") {
+            checkMatches(event)
+        }
+        if (event_type == "launchBlock") {
+            launchBlock(event)
+        }
+        if (event_type == "createOneBlock") {
+            createOneBlock(event)
+        }
+        if (event_type == "disableInitialFill") {
+            initialFill = false;
+
+             AppActions.gridEventDone(event)
+        }
+        if (event_type == "setActive") {
+            AppActions.setActiveGrid(grid_id);
+
+            AppActions.gridEventDone(event)
+        }
+        if (event_type == "swapBlocks") {
+            if (initialFill) {
+                AppActions.enqueueGridEvent("disableInitialFill", 0, ({}));
+                AppActions.enqueueGridEvent("disableInitialFill", 1, ({}))
+            }
+            if (activeTurn) {
+                var blk1 = grid_blocks[index(event.row1, event.column1)]
+                var blk2 = grid_blocks[index(event.row2, event.column2)]
+                var r1 = blk1.row
+                var r2 = blk2.row
+                var c1 = blk1.column
+                var c2 = blk2.column
+                blk1.row = r2
+                blk1.column = c2
+                blk2.row = r1
+                blk2.column = c1
+
+                grid_blocks[index(r1, c1)] = blk2
+                grid_blocks[index(r2, c2)] = blk1
+                blk1.x = blk1.column * blk1.width
+                blk1.y = blk1.row * blk1.height
+                blk2.x = blk2.column * blk2.width
+                blk2.y = blk2.row * blk2.height
+
+                AppActions.gridEventDone(event)
+                AppActions.enqueueGridEvent("checkMatches", grid_id, ({}))
+                AppActions.enableBlocks(grid_id, false)
+
             }
         }
-
-        AppListener {
-            filter: ActionTypes.setLaunchOnMatchEnabled
-            onDispatched: function(dtype, data) {
-                if (!data || data.grid_id !== grid_id) {
-                    return
-                }
-                launchOnMatchEnabled = data.enabled === true
-                if (launchOnMatchEnabled) {
-                    resumeCascadeIfNeeded()
-                }
-            }
-        }
-
-        AppListener {
-            filter: ActionTypes.deployPowerupRequest
-            onDispatched: function(dtype, data) {
-                handlePowerupDeployment(data)
-            }
-        }
-
-        AppListener {
-            filter: ActionTypes.applyPowerupBlocksEffect
-            onDispatched: function(dtype, data) {
-                if (!data || data.grid_id !== grid_id) {
-                    return
-                }
-                applyBlocksEffect(data)
-            }
-        }
-
-        AppListener {
-            filter: ActionTypes.applyPowerupCardHealth
-            onDispatched: function(dtype, data) {
-                if (!data || data.grid_id !== grid_id) {
-                    return
-                }
-                adjustPowerupCardHealth(data)
-            }
-        }
-
-        function handleGridEventExecute(event) {
-            current_event = event
-            var event_type = event.event_type
-            switch (event_type) {
-            case "beginFillCycle":
-                beginFillCycle(event.source_event || "queue")
-                AppActions.gridEventDone(current_event)
-                break
-            case "shuffleDown":
-                if (!cascadesEnabled) {
-                    pendingCascade = true
-                    damageCompactQueued = true
-                    AppActions.gridEventDone(current_event)
-                    break
-                }
-                damageCompactQueued = false
-                setGridState("compact", event.source_event || "queue")
-                AppActions.gridEventDone(current_event)
-                break
-            case "createBlocks":
-                createBlocks(event)
-                break
-            case "checkMatches":
-                checkMatches(event)
-                break
-            case "launchBlock":
-                launchBlock(event)
-                break
-            case "createOneBlock":
-                createOneBlock(event)
-                break
-            case "disableInitialFill":
-                initialFill = false
-                AppActions.gridEventDone(current_event)
-                break
-            case "setActive":
-                AppActions.setActiveGrid(grid_id)
-                AppActions.gridEventDone(current_event)
-                break
-            case "prepareFill":
-                beginFillCycle(event.source_event || "prepareFill")
-                AppActions.gridEventDone(current_event)
-                break
-            case "finalizeTurn":
-                AppActions.swapLaunchingAnimationsDone({
-                                                           "grid_id": grid_id,
-                                                           "source_event": event.source_event !== undefined ? event.source_event : "finalizeTurn",
-                                                           "initial_fill": event.initial_fill === true
-                                                       })
-                emitGridSettled(event.source_event || "finalizeTurn")
-                AppActions.gridEventDone(current_event)
-                break
-            case "swapBlocks":
-                if (initialFill) {
-                    AppActions.enqueueGridEvent("disableInitialFill", 0, ({}));
-                    AppActions.enqueueGridEvent("disableInitialFill", 1, ({}))
-                }
-                if (activeTurn) {
-                    var blk1 = grid_blocks[index(event.row1, event.column1)]
-                    var blk2 = grid_blocks[index(event.row2, event.column2)]
-                    var r1 = blk1.row
-                    var r2 = blk2.row
-                    var c1 = blk1.column
-                    var c2 = blk2.column
-                    blk1.row = r2
-                    blk1.column = c2
-                    blk2.row = r1
-                    blk2.column = c1
-
-                    grid_blocks[index(r1, c1)] = blk2
-                    grid_blocks[index(r2, c2)] = blk1
-                    blk1.x = blk1.column * blk1.width
-                    blk1.y = blk1.row * blk1.height
-                    blk2.x = blk2.column * blk2.width
-                    blk2.y = blk2.row * blk2.height
-
-                    AppActions.gridEventDone(current_event)
-                    setGridState("match", "swap")
-                    AppActions.enableBlocks(grid_id, false)
-
-                }
-                break
-            default:
-                AppActions.gridEventDone(current_event)
-                break
-            }
-        }
+    }
 
 
-        /*
+    /*
      *
      *    grid event functions area
     */
-        function hasEmptyCells() {
-        for (var i = 0; i < grid_blocks.length; ++i) {
-            if (!grid_blocks[i]) {
-                return true
-            }
-        }
-        return false
+    Timer {
+        id: shuffleTimer
+        interval: 100 // Delay in milliseconds
+        repeat: false
+        running: false
+        triggeredOnStart: false
+        onTriggered: shuffleDownStep()
     }
 
-    function countDrops(gridObj) {
-            // Initialize an object to store the number of rows each cell would drop
-            const drops = ({})
+    function shuffleDownStep(event) {
+        let madeChange = false
+        for (var i = 5; i >= 0; i--) {
+            for (var u = 0; u < 6; u++) {
+                if (grid_blocks[index(i, u)] == null) {
+                    for (var a = i; a >= 0; a--) {
+                        if ((a - 1) >= 0) {
 
-            // Loop through each column
-            for (var j = 0; j < 6; j++) {
-                // Initialize a counter for the next position in the new grid
-                let nextPosition = 5
+                            grid_blocks[index(a,
+                                              u)] = grid_blocks[index(a - 1, u)]
+                            grid_blocks[index(a - 1, u)] = null
+                            if (grid_blocks[index(a - 1, u)] != null) {
+                                madeChange = true
+                            }
+                            if (grid_blocks[index(a, u)] != null) {
 
-                // Loop through each row from bottom to top
-                for (var i = 5; i >= 0; i--) {
-                    // Calculate the index for the original grid
-                    const originalIndex = i * 6 + j
-
-                    // If the cell exists and is not -1
-                    if (gridObj[originalIndex]
-                            && gridObj[originalIndex].value != -1) {
-                        // Calculate the number of rows this cell would drop
-                        drops[originalIndex] = nextPosition - i
-
-                        // Move the next position one row up
-                        nextPosition--
+                                grid_blocks[index(a, u)].row = a
+                                grid_blocks[index(
+                                                a,
+                                                u)].y = (a) * grid_blocks[index(
+                                                                              a, u)].height
+                            }
+                        } else {
+                            grid_blocks[index(a, u)] = null
+                        }
                     }
                 }
             }
-            //console.log(JSON.stringify(drops))
-            return drops
         }
-        function handleBlockAnimationDoneEvent() {
-            animationCount--
-            if (animationCount < 0) {
-                animationCount = 0
-            }
-            // no-op: state timers poll hasAnimatingBlocks()
-        }
-        function handleBlockAnimationStartEvent() {
-            animationCount++
-        }
-        function createOneBlock(event) {
-            current_event = event
-            var column = event.column !== undefined ? event.column : event.col
-            if (column === undefined || column === null) {
-                console.warn("createOneBlock: missing column", grid_id, JSON.stringify(event))
-                AppActions.gridEventDone(current_event)
-                return
-            }
-            var requestedRow = event.row
-            var spawnRow = requestedRow
-            if (spawnRow === undefined || spawnRow === null) {
-                spawnRow = firstAvailableRow(column, requestedRow)
-            }
+        if (madeChange) {
 
-            var register = rowWithinBounds(spawnRow)
-            if (register && !isCellEmpty(spawnRow, column)) {
-                console.warn("createOneBlock: no empty cell available", grid_id, column)
-                AppActions.gridEventDone(current_event)
-                return
-            }
-
-            var colorValue = event.color !== undefined ? event.color : get_next_random_color()
-            var blk = instantiateBlock(spawnRow, column, colorValue, {
-                                           "register": register
-                                       })
-            if (blk && !register) {
-                incomingBlocks.push({
-                                        "block": blk,
-                                        "column": column
-                                    })
-            }
-            cleanupBlocks()
-            AppActions.gridEventDone(current_event)
-        }
-        function createBlocks(event) {
-            current_event = event
-            var counts = event.create_counts || {}
-
-        for (var column = 0; column < maxColumn; column++) {
-            var columnInfo = counts[String(column)]
-            if (!columnInfo) {
-                continue
-            }
-
-            var missing = columnInfo.missing !== undefined ? columnInfo.missing : 0
-            if (missing <= 0) {
-                continue
-            }
-            var limit = missing
-            for (var idx = 0; idx < limit; idx++) {
-                var spawn = spawnRowIndex()
-                var colorValue = columnInfo.new_colors && columnInfo.new_colors[idx] !== undefined ? columnInfo.new_colors[idx] : get_next_random_color()
-                var blk = instantiateBlock(spawn, column, colorValue, {
-                                              "register": rowWithinBounds(spawn)
-                                          })
-                if (blk && !rowWithinBounds(spawn)) {
-                    incomingBlocks.push({
-                                            "block": blk,
-                                            "column": column
-                                        })
-                }
-            }
-        }
-
-        cleanupBlocks()
-        AppActions.gridEventDone(current_event)
-        if (gridState !== "fill") {
-            setGridState("fill", "createBlocksEvent")
         } else {
-            Qt.callLater(processFillStep)
-        }
-    }
-        function repositionGridBlocks(row) {
-            for (var i = 0; i < 6; i++) {
-                var rowCount = 0
-                for (var u = 0; u < 6; u++) {
-                    if (grid_blocks[index(i, u)] != null) {
-                        grid_blocks[index(i,
-                                          u)].y = i * grid_blocks[index(i,
-                                                                        u)].height
-                    } else {
 
+        }
+        var gotEmpty = false
+        var grid_array = grid_blocks.map(function (item) {
+            if (item != null) {
+                return item.row
+            } else {
+                return -1
+            }
+        })
+        if (grid_array.indexOf(-1) > -1) {
+            for (var b = 5; b >= 0; b--) {
+                for (var c = 0; c < 6; c++) {
+                    if (grid_blocks[index(b, c)] == null) {
+                        AppActions.createOneBlock(grid_id, b, c)
+                        gotEmpty = true
                     }
                 }
             }
+            //  shuffleDownStep(event)
+        } else {
+
         }
-        function updateBlocks(row) {
-            /*  for (var i = 0; i < 6; i++) {
+        updateBlocks(i)
+        //console.log()
+        if (gotEmpty) {
+            shuffleTimer.restart()
+            AppActions.gridEventDone(event)
+            AppActions.fillGrid(grid_id, false)
+        } else {
+            AppActions.gridEventDone(event)
+            AppActions.enqueueGridEvent("checkMatches", grid_id, {})
+        }
+    }
+
+    function shuffleDown(event) {
+
+        shuffleTimer.start()
+    }
+    function countDrops(gridObj) {
+        // Initialize an object to store the number of rows each cell would drop
+        const drops = ({})
+
+        // Loop through each column
+        for (var j = 0; j < 6; j++) {
+            // Initialize a counter for the next position in the new grid
+            let nextPosition = 5
+
+            // Loop through each row from bottom to top
+            for (var i = 5; i >= 0; i--) {
+                // Calculate the index for the original grid
+                const originalIndex = i * 6 + j
+
+                // If the cell exists and is not -1
+                if (gridObj[originalIndex]
+                        && gridObj[originalIndex].value != -1) {
+                    // Calculate the number of rows this cell would drop
+                    drops[originalIndex] = nextPosition - i
+
+                    // Move the next position one row up
+                    nextPosition--
+                }
+            }
+        }
+        //console.log(JSON.stringify(drops))
+        return drops
+    }
+    function handleBlockAnimationDoneEvent() {
+        animationCount--
+        if (animationCount == 0) {
+
+            //  AppActions.gridEventDone(current_event)
+        }
+    }
+    function handleBlockAnimationStartEvent() {
+        animationCount++
+    }
+    function createOneBlock(event) {
+        var i = event.column
+        var u = event.row
+        //console.log("Creating block", u, "for column", i)
+        var blkW = Math.floor(gridRoot.width / 6)
+        var blkH = Math.floor(gridRoot.height / 6)
+        var startY = (blkH * u) - (blkH * 6)
+        var blkRow = u
+        var blkCol = i
+        var block_color
+        switch (event.color) {
+        case 0:
+            block_color = "red"
+            break
+        case 1:
+            block_color = "blue"
+            break
+        case 2:
+            block_color = "yellow"
+            break
+        case 3:
+            block_color = "green"
+            break
+        default:
+            block_color = "white"
+        }
+        for (var p = 0; p < 6; p++) {
+            if (grid_blocks[index(p, blkCol)] == null) {
+                blkRow = p
+            } else {
+                break
+            }
+        }
+
+        //console.log("creating block", blkRow, blkCol, blkH, blkW)
+        var blk = blockComponent.createObject(gridRoot, {
+                                                  "x": blkW * blkCol,
+                                                  "y": startY,
+                                                  "row": blkRow,
+                                                  "column": blkCol,
+                                                  "width": blkW,
+                                                  "height": blkH,
+                                                  "block_color": block_color,
+                                                  "grid_id": grid_id
+                                              })
+        blk.row = blkRow
+        blk.column = blkCol
+
+        blk.animationStart.connect(handleBlockAnimationStartEvent)
+        blk.animationDone.connect(handleBlockAnimationDoneEvent)
+        blk.rowUpdated.connect(updateBlocks)
+        blk.rowUpdated.connect(repositionGridBlocks)
+        grid_blocks[index(blkRow, blkCol)] = blk
+        blk.y = (blkH * blkRow)
+        AppActions.gridEventDone(event)
+    }
+    function createBlocks(event) {
+        var counts = event.create_counts
+        current_event = event
+        for (var i = 0; i < 6; i++) {
+            var columnCounts = counts[String(i)].missing
+            var new_colors = counts[String(i)].new_colors
+            for (var u = 0; u < 6; u++) {
+                //console.log("Creating block", u, "for column", i)
+                var blkW = Math.floor(gridRoot.width / 6)
+                var blkH = Math.floor(gridRoot.height / 6)
+                var startY = (blkH * u) - (blkH * 6)
+                var blkRow = u
+                var blkCol = i
+
+                //console.log("creating block", blkRow, blkCol, blkH, blkW)
+                var blk = blockComponent.createObject(gridRoot, {
+                                                          "x": blkW * blkCol,
+                                                          "y": startY,
+                                                          "row": blkRow,
+                                                          "column": blkCol,
+                                                          "width": blkW,
+                                                          "height": blkH,
+                                                          "block_color": new_colors.shift(
+                                                                             ),
+                                                          "grid_id": grid_id
+                                                      })
+                blk.row = blkRow
+                blk.column = blkCol
+
+                blk.animationStart.connect(handleBlockAnimationStartEvent)
+                blk.animationDone.connect(handleBlockAnimationDoneEvent)
+                blk.rowUpdated.connect(updateBlocks)
+                blk.rowUpdated.connect(repositionGridBlocks)
+                grid_blocks[index(blkRow, blkCol)] = blk
+                blk.y = (blkH * blkRow)
+            }
+        }
+
+        AppActions.gridEventDone(current_event)
+    }
+    function repositionGridBlocks(row) {
+        for (var i = 0; i < 6; i++) {
+            var rowCount = 0
+            for (var u = 0; u < 6; u++) {
+                if (grid_blocks[index(i, u)] != null) {
+                    grid_blocks[index(i,
+                                      u)].y = i * grid_blocks[index(i,
+                                                                    u)].height
+                } else {
+
+                }
+            }
+        }
+    }
+    function updateBlocks(row) {
+        /*  for (var i = 0; i < 6; i++) {
             var rowCount = 0
             for (var u = 0; u < 6; u++) {
 
@@ -1236,113 +464,219 @@ Item {
                 grid_blocks[index(c, i)] = null
             }
         } */
-        }
-        function checkMatches(event) {
-            current_event = event
-            setGridState("match", event.source_event || "checkMatchesEvent")
-            AppActions.gridEventDone(current_event)
-        }
-
-
-        function createOneShotTimer(element, duration, action, params) {
-            var comp = Qt.createComponent(
-                        'qrc:///Blockwars8/components/SingleShotTimer.qml')
-            comp.createObject(element, {
-                                  "action": action,
-                                  "interval": duration,
-                                  "element": element,
-                                  "params": params
-                              })
-        }
-        function updateAnimationCounts() {
-            animationCount = 0
-            for (var i = 0; i < 6; i++) {
-                var rowCount = 0
-                for (var u = 0; u < 6; u++) {
-                    if (grid_blocks[index(i, u)] == null) {
-                        continue
-                    }
-                    if (Math.abs(grid_blocks[index(
-                                                 i,
-                                                 u)].y - (grid_blocks[index(i,
-                                                                            u)].row
-                                                          * grid_blocks[index(
-                                                                            i,
-                                                                            u)].height)) > 10) {
-                        animationCount++
-                    }
-                }
-            }
-        }
-        function launchBlock(event) {
-            current_event = event
-            AppActions.gridEventDone(current_event)
-        }
-        function cleanupBlocks() {
-            for (var idx = 0; idx < grid_blocks.length; idx++) {
-                var blk = grid_blocks[idx]
-                if (!blk) {
-                    grid_blocks[idx] = null
-                    continue
-                }
-                if (!Qt.isQtObject(blk) || blk.objectName !== "Block") {
-                    grid_blocks[idx] = null
-                }
-            }
-
-            for (var i = gridRoot.children.length - 1; i >= 0; --i) {
-                var child = gridRoot.children[i]
-                if (!child || child.objectName !== "Block") {
-                    continue
-                }
-                if (child.hasBeenLaunched) {
-                    continue
-                }
-                var keepDueToIncoming = false
-                for (var t = 0; t < incomingBlocks.length; ++t) {
-                    var pending = incomingBlocks[t]
-                    if (pending && pending.block === child) {
-                        keepDueToIncoming = true
-                        break
-                    }
-                }
-                if (keepDueToIncoming) {
-                    continue
-                }
-                if (isPowerupTile(child)) {
-                    continue
-                }
-                if (grid_blocks.indexOf(child) === -1) {
-                    child.destroy()
-                }
-            }
-        }
-        function fillBlocks(blocksToFill) {
-            disableSwitching();
-            blocksToFill.forEach((block, index) => {
-                                     setTimeout(() => {
-                                                    addBlock(block);
-                                                    if (index === blocksToFill.length - 1) {
-                                                        enableSwitching();
-                                                    }
-                                                }, index * 500);
-                                 });
-        }
-        Component {
-            id: blockComponent
-            Block {
-                id: blk
-            }
-        }
-
-        Component {
-            id: powerupTileComponent
-            PowerupTile {
-                id: powerTile
-            }
-        }
-        Pool {
-            id: blockPool
-        }
-
     }
+    function checkMatches(event) {
+        cleanupBlocks()
+        updateAnimationCounts()
+        if (animationCount > 0) {
+            createOneShotTimer(gridRoot, ((25 * 6) + (25 * 6) + 150),
+                               function (params) {
+
+                                   AppActions.enqueueGridEvent("checkMatches",
+                                                               params.grid_id,
+                                                               {})
+                               }, {
+                                   "event": event,
+                                   "grid_id": grid_id
+                               })
+            //console.log("Animation count is", animationCount,
+            //            "skipping match checking")
+            AppActions.gridEventDone(event)
+            return
+        }
+        launchList = []
+        current_event = event
+        var curGrid = []
+        var curDelay = 250
+        var color_nums = {
+            "red": "0",
+            "blue": "1",
+            "yellow": "2",
+            "green": "3"
+        }
+        for (var i = 0; i < 6; i++) {
+            var rowStr = ""
+            var colStr = ""
+            for (var u = 0; u < 6; u++) {
+                if (grid_blocks[index(i, u)] != null) {
+                    rowStr += color_nums[grid_blocks[index(i, u)].block_color]
+
+                    curGrid.push(color_nums[grid_blocks[index(i,
+                                                              u)].block_color])
+                } else {
+                    curGrid.push(-1)
+                }
+                if (grid_blocks[index(u, i)] != null) {
+                    colStr += color_nums[grid_blocks[index(u, i)].block_color]
+                }
+            }
+            //console.log(rowStr)
+            for (var p = 0; p < 4; p++) {
+
+                for (var q = 6; q >= 3; q--) {
+                    var str = ""
+                    while (str.length < q) {
+                        str += p.toString()
+                    }
+
+                    if (rowStr.indexOf(str) > -1) {
+
+                        console.log("found match at", rowStr.indexOf(str),
+                                    "that is", str.length, "blocks in a column")
+                        for (var u = rowStr.indexOf(
+                                 str); u < (rowStr.indexOf(
+                                                str) + str.length); u++) {
+                            curDelay += 75
+                            var params = {
+                                "i": i,
+                                "u": u,
+                                "grid_blocks": grid_blocks
+                            }
+                            AppActions.enqueueGridEvent("launchBlock",
+                                                        grid_id, {
+                                                            "row": i,
+                                                            "column": u,
+                                                            "damage": grid_blocks[index(u, i)].health
+                                                        })
+                            curGrid[index(i, u)] = -1
+
+                            launchCount++
+                        }
+                    }
+                    if (colStr.indexOf(str) > -1) {
+
+                        console.log("found match at", colStr.indexOf(str),
+                                    "that is", str.length, "blocks in a row")
+
+                        for (var u = colStr.indexOf(
+                                 str); u < (colStr.indexOf(
+                                                str) + str.length); u++) {
+                            curDelay += 75
+                            var params = {
+                                "i": u,
+                                "u": i,
+                                "grid_blocks": grid_blocks
+                            }
+                            AppActions.enqueueGridEvent("launchBlock",
+                                                        grid_id, {
+                                                            "row": u,
+                                                            "column": i,
+                                                            "damage": grid_blocks[index(u, i)].health
+                                                        })
+                            curGrid[index(i, u)] = -1
+                            launchCount++
+                        }
+                    }
+                }
+            }
+        }
+
+        //  AppActions.enqueueGridEvent("shuffleDown", grid_id, ({}))
+        //        AppActions.enqueueGridEvent("shuffleDown", grid_id, {
+        //                                        "grid": curGrid
+        //                                    })
+        //  if (animationCount == 0) {
+        if (launchList.length == 0) {
+            AppActions.enableBlocks(grid_id, true)
+        }
+        AppActions.gridEventDone(current_event)
+        // }
+    }
+
+    function createOneShotTimer(element, duration, action, params) {
+        var comp = Qt.createComponent(
+                    'qrc:///Blockwars8/components/SingleShotTimer.qml')
+        comp.createObject(element, {
+                              "action": action,
+                              "interval": duration,
+                              "element": element,
+                              "params": params
+                          })
+    }
+    function updateAnimationCounts() {
+        animationCount = 0
+        for (var i = 0; i < 6; i++) {
+            var rowCount = 0
+            for (var u = 0; u < 6; u++) {
+                if (grid_blocks[index(i, u)] == null) {
+                    continue
+                }
+                if (Math.abs(grid_blocks[index(
+                                             i,
+                                             u)].y - (grid_blocks[index(i,
+                                                                        u)].row
+                                                      * grid_blocks[index(
+                                                                        i,
+                                                                        u)].height)) > 10) {
+                    animationCount++
+                }
+            }
+        }
+    }
+    function launchBlock(event) {
+        if (event.grid_id == grid_id) {
+            current_event = event
+            if (grid_blocks[index(event.row, event.column)] == null) {
+                AppActions.gridEventDone(current_event)
+                launchCount--
+                animationCount--
+                if (launchCount == 0) {
+
+                    AppActions.enqueueGridEvent("shuffleDown", grid_id, ({}))
+                }
+                return
+            } else {
+                if (launchList.indexOf(index(event.row, event.column)) == -1) {
+                    var blk = grid_blocks[index(event.row, event.column)]
+                    if (blk) {
+                        blk.launch()
+                        var moveBlocks = 0
+                        launchCount++
+                        launchList.push(index(event.row, event.column))
+
+                        grid_blocks[index(event.row, event.column)] = null
+                    }
+                } else {
+                    //  AppActions.gridEventDone(current_event)
+                    launchCount--
+                    if (launchCount <= 0) {
+                        AppActions.enqueueGridEvent("checkMatches",
+                                                    grid_id, ({}))
+                    }
+                }
+                //board[index(event.row, event.column)] = null
+                // AppActions.gridEventDone(current_event)
+            }
+        }
+    }
+    function cleanupBlocks() {
+        for (var i = 0; i < gridRoot.children.length; i++) {
+            var child = gridRoot.children[i]
+
+            //console.log(typeof child)
+            if (child.objectName == "Block") {
+                if (grid_blocks.indexOf(child) == -1) {
+                    child.destroy()
+                    // Do something with the block instance
+                }
+            }
+        }
+    }
+    function fillBlocks(blocksToFill) {
+          disableSwitching();
+          blocksToFill.forEach((block, index) => {
+              setTimeout(() => {
+                  addBlock(block);
+                  if (index === blocksToFill.length - 1) {
+                      enableSwitching();
+                  }
+              }, index * 500);
+          });
+      }
+    Component {
+        id: blockComponent
+        Block {
+            id: blk
+        }
+    }
+}

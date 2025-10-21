@@ -5,7 +5,6 @@ import QuickFlux 1.1
 import "../components" 1.0
 import "../stores" 1.0
 
-
 ActionCreator {
     id: obj_inst
     signal startApp
@@ -66,12 +65,6 @@ ActionCreator {
                                    "end_move_after": end_move_after
                                })
     }
-    function beginFillCycle(grid_id, source_event) {
-        AppDispatcher.dispatch(ActionTypes.beginFillCycle, {
-                                   "grid_id": grid_id,
-                                   "source_event": source_event
-                               })
-    }
     function createOneBlock(grid_id, row, column) {
         AppDispatcher.dispatch(ActionTypes.createOneBlock, {
                                    "grid_id": grid_id,
@@ -91,113 +84,6 @@ ActionCreator {
         AppDispatcher.dispatch(ActionTypes.enableBlocks, {
                                    "grid_id": grid_id,
                                    "blocks_enabled": blocks_enabled
-                               })
-    }
-
-    function setFillingEnabled(grid_id, enabled) {
-        AppDispatcher.dispatch(ActionTypes.setFillingEnabled, {
-                                   "grid_id": grid_id,
-                                   "enabled": enabled === true
-                               })
-    }
-
-    function setLaunchOnMatchEnabled(grid_id, enabled) {
-        AppDispatcher.dispatch(ActionTypes.setLaunchOnMatchEnabled, {
-                                   "grid_id": grid_id,
-                                   "enabled": enabled === true
-                               })
-    }
-
-    function powerupEnergyDelta(grid_id, slot_id, color, amount, reason) {
-        AppDispatcher.dispatch(ActionTypes.powerupEnergyDelta, {
-                                   "grid_id": grid_id,
-                                   "slot_id": slot_id,
-                                   "color": color,
-                                   "amount": amount,
-                                   "reason": reason
-                               })
-    }
-
-    function powerupEnergyReset(grid_id, slot_id) {
-        AppDispatcher.dispatch(ActionTypes.powerupEnergyReset, {
-                                   "grid_id": grid_id,
-                                   "slot_id": slot_id
-                               })
-    }
-
-    function powerupReadyState(grid_id, slot_id, ready) {
-        AppDispatcher.dispatch(ActionTypes.powerupReadyState, {
-                                   "grid_id": grid_id,
-                                   "slot_id": slot_id,
-                                   "ready": ready === true
-                               })
-    }
-
-    function requestPowerupDeployment(params) {
-        var payload = {}
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.deployPowerupRequest, payload)
-    }
-
-    function confirmPowerupDeployment(params) {
-        var payload = {}
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.deployPowerupApplied, payload)
-    }
-
-    function executePowerupAbility(params) {
-        var payload = {}
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.executePowerupAbility, payload)
-    }
-
-    function applyPowerupBlocksEffect(params) {
-        var payload = {}
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.applyPowerupBlocksEffect, payload)
-    }
-
-    function applyPowerupCardHealth(params) {
-        var payload = {}
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.applyPowerupCardHealth, payload)
-    }
-
-    function powerupPlayerHealthDelta(grid_id, amount, reason) {
-        AppDispatcher.dispatch(ActionTypes.powerupPlayerHealthDelta, {
-                                   "grid_id": grid_id,
-                                   "amount": amount,
-                                   "reason": reason
                                })
     }
 
@@ -235,216 +121,6 @@ ActionCreator {
         params.gameState = gameState
         AppDispatcher.dispatch(ActionTypes.sendGameStateEvent, params)
     }
-    function initializeTurnCycle(params) {
-        var payload = {
-            "attacker_grid_id": params && params.attacker_grid_id !== undefined ? params.attacker_grid_id : 0,
-            "defender_grid_id": params && params.defender_grid_id !== undefined ? params.defender_grid_id : 1,
-            "moves": params && params.moves !== undefined ? params.moves : 3
-        }
-        if (params && params.context !== undefined) {
-            payload.context = params.context
-        }
-        AppDispatcher.dispatch(ActionTypes.initializeTurnCycle, payload)
-    }
-    function requestNextTurn(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.requestNextTurn, payload)
-    }
-    function turnCycleTurnBegan(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.turnCycleTurnBegan, payload)
-    }
-    function swapLaunchingStarted(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.swapLaunchingStarted, payload)
-    }
-    function swapLaunchingAnimationsDone(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.swapLaunchingAnimationsDone, payload)
-    }
-    function informGridFillInNeeded(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.informGridFillInNeeded, payload)
-    }
-    function cpuRequestMove(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.cpuRequestMove, payload)
-    }
-    function cpuMoveUnavailable(grid_id, details) {
-        var payload = { "grid_id": grid_id }
-        if (details) {
-            for (var key in details) {
-                if (details.hasOwnProperty(key) && key !== "grid_id") {
-                    payload[key] = details[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.cpuMoveUnavailable, payload)
-    }
-
-    function resetSinglePlayerPowerupSelection(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.singlePlayerSelectionReset, payload)
-    }
-
-    function setSinglePlayerPowerupSelection(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.singlePlayerSelectionSet, payload)
-    }
-
-    function confirmSinglePlayerPowerupSelection(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.singlePlayerSelectionConfirmed, payload)
-    }
-
-    function gridSettled(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.gridSettled, payload)
-    }
-
-    function cascadeEnded(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.cascadeEnded, payload)
-    }
-
-    function requestGridSnapshot(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.requestGridSnapshot, payload)
-    }
-
-    function gridSnapshotProvided(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.gridSnapshotProvided, payload)
-    }
-
-
-    function gameBoardDashboardsReady(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.gameBoardDashboardsReady, payload)
-    }
-
-    function requestGameBoardSeed(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.gameBoardSeedRequested, payload)
-    }
-
-    function acknowledgeGameBoardSeed(params) {
-        var payload = { }
-        if (params) {
-            for (var key in params) {
-                if (params.hasOwnProperty(key)) {
-                    payload[key] = params[key]
-                }
-            }
-        }
-        AppDispatcher.dispatch(ActionTypes.gameBoardSeedAcknowledged, payload)
-    }
-
     function setBlockProperty(row, col, grid_id, propName, propValue) {
         var params = ({
                           "row": row,
@@ -457,27 +133,75 @@ ActionCreator {
     }
 
     function activatePowerup(slot_id, grid_id) {
+        var powerupArray = []
         console.log("Activating powerup", slot_id, grid_id)
-        var runtime = MainStore.powerup_runtime_state || {}
-        var gridState = runtime[String(grid_id)]
-        if (!gridState || !gridState.slots) {
-            return
+        if (grid_id == 0) {
+            powerupArray = MainStore.my_powerup_data
         }
-        var slotState = gridState.slots[String(slot_id)]
-        if (!slotState) {
-            return
+        if (grid_id == 1) {
+            powerupArray = MainStore.enemy_powerup_data
         }
-        var payload = {
-            "slot_id": slot_id,
-            "grid_id": grid_id,
-            "ability": JSON.parse(JSON.stringify(slotState))
+        console.log("Poweup Data", JSON.stringify(powerupArray))
+        var powerupType = getPowerupProperty(powerupArray, slot_id,
+                                             grid_id, "type")
+        var powerupTarget = getPowerupProperty(powerupArray, slot_id,
+                                               grid_id, "target")
+        var _powerupAmount = getPowerupProperty(powerupArray, slot_id,
+                                                grid_id, "amount")
+        var powerupAmount = 0
+        var powerupEnergy = getPowerupProperty(powerupArray, slot_id,
+                                               grid_id, "energy")
+        var target_grid_id = powerupTarget
+        console.log(powerupType, powerupTarget, _powerupAmount, powerupEnergy)
+        if (powerupTarget == "self") {
+            powerupAmount = Math.abs(_powerupAmount)
+            target_grid_id = grid_id
         }
-        AppDispatcher.dispatch(ActionTypes.activatePowerup, payload)
-        executePowerupAbility(payload)
+        if (powerupTarget == "opponent") {
+            powerupAmount = 0 - Math.abs(_powerupAmount)
+            if (grid_id == 0) {
+                target_grid_id = 1
+            } else {
+                target_grid_id = 0
+            }
+        }
+        if (powerupType == "blocks") {
+            var powerupGrid = getPowerupProperty(powerupArray, slot_id,
+                                                 grid_id, "grid")
+            for (var a = 0; a < 6; a++) {
+
+                for (var b = 0; b < 6; b++) {
+                    var idx = (a * 6) + b
+                    if (powerupGrid[idx] == true) {
+
+                        if (powerupTarget == "self")
+                            console.log("Modify blockhealth", target_grid_id,
+                                        a, b, powerupAmount)
+                        AppActions.modifyBlockHealth(a, b, target_grid_id,
+                                                     powerupAmount)
+                    }
+                }
+            }
+        }
+        if (powerupType == "heros") {
+
+        }
+        if (powerupType == "health") {
+
+        }
+    }
+    function getPowerupProperty(powerupArray, slot_id, grid_id, powerupProperty) {
+        for (var i = 0; i < powerupArray.length; ++i) {
+            var powerupObject = powerupArray[i]
+            if (i == slot_id) {
+                return powerupObject[powerupProperty]
+            }
+        }
+        return null
     }
     function modifyBlockHealth(row, column, grid_id, amount) {
         var params = ({
-                          "row": 5 - row,
+                          "row": row,
                           "column": column,
                           "grid_id": grid_id,
                           "amount": amount

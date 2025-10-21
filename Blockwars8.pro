@@ -10,8 +10,7 @@ SOURCES += main.cpp \
   datanode.cpp \
   ircsocket.cpp \
   pool.cpp \
-  powerupeditordialog.cpp \
-  promiselatch.cpp
+  powerupeditordialog.cpp
 
 SOURCES += $$PWD/appview.cpp
 
@@ -31,8 +30,7 @@ HEADERS += \
     irc.h \
     ircsocket.h \
     pool.h \
-    powerupeditordialog.h \
-    promiselatch.h
+    powerupeditordialog.h
 
 ROOT_DIR = $$PWD
 
@@ -41,6 +39,7 @@ include(deployment.pri)
 include(quickflux/quickflux.pri)
 
 DISTFILES += \
-    AGENTS.md \
+    WHEEL.md \
     qpm.json \
     qpm.pri
+

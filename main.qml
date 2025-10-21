@@ -56,9 +56,6 @@ ApplicationWindow {
                 case "powerup_editor":
                     stackView.replace(zonePowerupEditorComponent)
                     break
-                case "options":
-                    stackView.replace(zoneOptionsComponent)
-                    break
                 }
             }
         }
@@ -70,10 +67,5 @@ ApplicationWindow {
     Component {
         id: zoneSinglePlayerComponent
         SinglePlayer {}
-    }
-    Component {
-        id: zoneOptionsComponent
-        //Options {}
-        Item {}
     }
 }

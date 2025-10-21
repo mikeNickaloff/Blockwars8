@@ -1,7 +1,6 @@
 ﻿import QtQuick 2.12
 import QtQuick.Controls 2.5
 import QtQuick.Layouts 1.3
-import QtQml 2.15
 import QtQml.Models 2.15
 import "../models"
 import QtMultimedia 5.5
@@ -19,7 +18,6 @@ Item {
     property var grid_id: 0
     property var grid_event_queue: []
     property var grid_block_data: new Array(36)
-    property Item gridItem: null
 
     property var waitingForCallback: false
     Pool {
@@ -54,28 +52,6 @@ Item {
 
     function index(row, column) {
         return column + (row * 6)
-    }
-
-    onGridItemChanged: refreshGridBlockData()
-
-    function refreshGridBlockData() {
-        for (var idx = 0; idx < grid_block_data.length; idx++) {
-            grid_block_data[idx] = null
-        }
-
-        if (!gridItem || !gridItem.grid_blocks) {
-            return
-        }
-
-        for (var r = 0; r < 6; r++) {
-            for (var c = 0; c < 6; c++) {
-                var sourceIdx = gridItem.index(r, c)
-                var blockObj = gridItem.grid_blocks[sourceIdx]
-                if (blockObj && Qt.isQtObject(blockObj) && blockObj.objectName === "Block") {
-                    grid_block_data[index(r, c)] = blockObj.block_color
-                }
-            }
-        }
     }
 
     Component.onCompleted: {
@@ -146,38 +122,8 @@ Item {
         filter: ActionTypes.fillGrid
         onDispatched: function (dtype, ddata) {
             var evt = ddata
-            if (evt.grid_id == grid_id) {
+            if (evt.grid_d == grid_id) {
                 fill()
-            }
-        }
-    }
-    AppListener {
-        filter: ActionTypes.requestGridSnapshot
-        onDispatched: function (dtype, ddata) {
-            if (ddata.grid_id != controller_root.grid_id) {
-                return
-            }
-            var snapshot = createGridSnapshot()
-            var payload = ({
-                               "grid_id": controller_root.grid_id,
-                               "cells": snapshot,
-                               "request_id": ddata.request_id !== undefined ? ddata.request_id : "",
-                               "reason": ddata.reason !== undefined ? ddata.reason : "unspecified"
-                           })
-            AppActions.gridSnapshotProvided(payload)
-        }
-    }
-    AppListener {
-        filter: ActionTypes.beginFillCycle
-        onDispatched: function (dtype, ddata) {
-            if (ddata.grid_id == controller_root.grid_id) {
-                var evt = ({})
-                evt.event_type = "beginFillCycle"
-                evt.source_event = ddata.source_event
-                grid_event_queue.push(evt)
-                if (!waitingForCallback) {
-                    executeNextGridEvent()
-                }
             }
         }
     }
@@ -190,6 +136,10 @@ Item {
                 evt.event_type = "createOneBlock"
                 evt.row = message.row
                 evt.column = message.column
+                var pool = getPool(message.column)
+                var rand_color = pool.randomNumber(getPoolIndex(message.column))
+                controller_root.increasePoolIndex(message.column)
+                evt.color = rand_color
                 grid_event_queue.push(evt)
                 if (!waitingForCallback) {
                     executeNextGridEvent()
@@ -271,20 +221,42 @@ Item {
     }
     function fill() {
 
-        refreshGridBlockData()
         var creationCounts = ({})
         console.log("filling in")
         for (var i = 0; i < 6; i++) {
             var colMissingCount = 0
+            var pool = getPool(i)
+            var pool_index = getPoolIndex(i)
+            var new_colors = []
             for (var u = 0; u < 6; u++) {
                 if (grid_block_data[index(u, i)] == null) {
                     colMissingCount++
+                    var rand_color = pool.randomNumber(pool_index)
+                    pool_index++
+                    controller_root.increasePoolIndex(i)
+                    var block_color
+                    switch (rand_color) {
+                    case 0:
+                        block_color = "red"
+                        break
+                    case 1:
+                        block_color = "blue"
+                        break
+                    case 2:
+                        block_color = "yellow"
+                        break
+                    case 3:
+                        block_color = "green"
+                        break
+                    default:
+                        block_color = "white"
+                    }
+                    new_colors.push(block_color)
                 }
             }
-            if (colMissingCount > 0) {
-                creationCounts[String(i)] = {
-                    "missing": colMissingCount
-                }
+            creationCounts[String(i)] = {
+                "missing": colMissingCount,
+                "new_colors": new_colors
             }
         }
         console.log("needed blocks", JSON.stringify(creationCounts))
@@ -292,6 +264,10 @@ Item {
         evt.event_type = "createBlocks"
         evt.create_counts = creationCounts
         grid_event_queue.push(evt)
+
+        var evt2 = ({})
+        evt2.event_type = "checkMatches"
+        grid_event_queue.push(evt2)
 
         if (!waitingForCallback) {
             executeNextGridEvent()
@@ -322,25 +298,4 @@ Item {
               enableSwitching();
           }
       }
-
-    function createGridSnapshot() {
-        var cells = []
-        if (!gridItem || !gridItem.getBlock) {
-            return cells
-        }
-        for (var r = 0; r < 6; r++) {
-            for (var c = 0; c < 6; c++) {
-                var blk = gridItem.getBlock(r, c)
-                if (blk && Qt.isQtObject(blk) && blk.objectName === "Block") {
-                    cells.push({
-                                   "row": r,
-                                   "column": c,
-                                   "color": blk.block_color,
-                                   "health": blk.block_health
-                               })
-                }
-            }
-        }
-        return cells
-    }
 }
