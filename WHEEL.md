@@ -135,15 +135,19 @@ Application store holding powerup data for both players and SQLite-backed persis
 
 ## Functions
 ### loadDatabase() -- placeholder for database bootstrap (currently no-op)
-### loadPowerupData() -- loads saved powerup data from LocalStorage into `my_powerup_data`
-### savePowerupData() -- persists current `my_powerup_data` into LocalStorage
-### compressData(grid_targets) -- compresses a 6x6 selection list to a compact string
-### decompressData(compressedStr) -- expands a compressed powerup record back to structured form
+### loadPowerupData() -- loads persisted entries from `localPowerupDataStorage`, decoding assignments and JSON payloads into `my_powerup_data`
+### savePowerupData() -- normalizes the current slot map and writes it back using `localPowerupDataStorage.replaceAll()`
+### ingestPowerupData(rawData) -- accepts raw editor payloads, normalizes them through `powerupPersistence`, updates `my_powerup_data`, and persists changes
+### powerupPersistence.normalize(rawData) -- helper that unwraps lists/maps, assigns slot indices, and injects default names for storage
+### powerupPersistence.encode(powerupData) -- converts normalized powerups into database rows with hex-encoded assignments/data
+### powerupPersistence.decode(rows) -- rebuilds the slot-indexed map from stored rows while respecting assignment targets
 
 ## Properties
 ### text -- sample string value used by templates/UI
-### my_powerup_data -- object mapping slot→powerup config for local player
+### my_powerup_data -- object mapping slot→powerup config (including display name) for the local player
 ### enemy_powerup_data -- array of powerup configurations for the opponent
+### localPowerupDataStorage -- `SQLDataStorage` instance configured for the `localPowerupData` table
+### powerupPersistence -- helper object encapsulating normalization/encoding utilities for powerup persistence
 
 ## signals
 ### None
@@ -160,6 +164,39 @@ Simple model of 36 cells using `Instantiator`, exposing row/col and selection pe
 ### delegate.selected -- whether the cell is selected
 ### delegate.row -- row index computed from model index
 ### delegate.col -- column index computed from model index
+
+## signals
+### None
+
+
+# Blockwars8/models/SQLDataStorage.qml
+## File details
+Reusable QtObject wrapper around Qt Quick LocalStorage that manages table creation, CRUD helpers, and hex-encoded JSON utilities.
+
+## Functions
+### database() -- opens (or creates) the configured LocalStorage database synchronously
+### withTransaction(operation) -- runs a callback within a transaction, ensuring the table exists when `autoCreateTable` is true
+### ensureTable(tx) -- creates the configured table using `columnDefinitions` when missing
+### execute(tx, statement, values) -- executes SQL with error handling and returns row metadata
+### rowsFromResultSet(resultSet) -- converts a `SqlResult` into an array of row objects
+### insert(row) -- inserts or replaces a row based on key/value pairs
+### update(values, criteria) -- updates rows matching the criteria map with new values
+### select(criteria, columns) -- fetches rows filtered by criteria, optionally selecting specific columns
+### selectAll(columns) -- convenience wrapper returning every row (optionally limited to given columns)
+### remove(criteria) -- deletes rows matching the provided criteria map
+### deleteAll() -- deletes every row in the current table
+### replaceAll(rows) -- clears the table and bulk inserts the provided rows within one transaction
+### toHex(value) -- JSON serializes and encodes a value as uppercase hexadecimal text
+### fromHex(hex) -- decodes a hexadecimal payload and parses the resulting JSON back into its original value
+
+## Properties
+### databaseName -- LocalStorage database name (default "block.wars")
+### version -- schema version string passed to LocalStorage
+### description -- human-readable description of the database
+### estimatedSize -- storage quota hint for the database
+### table -- table name targeted by helper operations
+### columnDefinitions -- object mapping column names to SQL definitions for `ensureTable`
+### autoCreateTable -- flag indicating whether `ensureTable` runs automatically for each transaction
 
 ## signals
 ### None
