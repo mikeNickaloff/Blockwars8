@@ -1,15 +1,7 @@
 # Blockwars 8
 
- Made by Mike Nickaloff halfway and then finished by ChatGPT 5-codex CLI
+ Made by Mike Nickaloff halfway and has now become an experiment repo for different prompt engineering AGENTS.md file variations
 
 ### How and why
 
--  This was going to be a QuickFlux implementation of Blockwars, started back when Qt 5.15 was still mainstream and QuickFlux was supported.
--  Qt6 broke QuickFlux by changing the API, and nobody wanted to take the time to try to figure out how to fix it and abandonded the project.
--  Now many years later, due to pure boredom and the ability to generate massive projects in very little time, I decided to let our AI buddy ChatGPT5 finish out Blockwars 8
--  I must say.. it looks terrible.. especially the powerup interaction and the visuals.. far cry from what i wwas going for.
-
-### Why this doesn't mattter
-- Working on Blockwars24 now that is going to have a nice abstraction layer which will essentially encapsulate all the redundant code from Blockwars8 into each individual component that will then make quick work out of this simple game rather than creating a boat load of AppActions im going to create just a few layers of abstraction and call it a day.
-
-### How did I get ChatGPT to do all this complex wiring?  Check out <u>AGENTS.md</u> in this repo -- this is the prompt I used for the project.. longer than the code tbh
+Because prompt engineering is kind of fun in its own way. This time around, I'm going to try a new technique that I was able to prove as a way to inject a bit of brains into these AI-powered code generating agents by building a documenting all of the wheels first so that the AI doesn't reinvent them.
