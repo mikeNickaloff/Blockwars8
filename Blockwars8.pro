@@ -39,6 +39,7 @@ include(deployment.pri)
 include(quickflux/quickflux.pri)
 
 DISTFILES += \
+    TODO.md \
     WHEEL.md \
     qpm.json \
     qpm.pri

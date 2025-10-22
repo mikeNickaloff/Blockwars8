@@ -104,7 +104,8 @@ Pane {
                 wrapMode: Text.WordWrap
             }
 
-            FormLayout {
+            GridLayout {
+                columns: 2
                 Layout.fillWidth: true
                 visible: snapshot !== null
 
