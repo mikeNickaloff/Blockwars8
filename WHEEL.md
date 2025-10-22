@@ -91,12 +91,16 @@ Singleton `ActionCreator` façade that normalizes legacy slot payload structures
 ### editSlot(slotId, slotState, metadata) -- emits an edit lifecycle event with normalized slot payload data
 ### deleteSlot(slotId, metadata) -- dispatches a delete lifecycle event scoped to the provided slot id
 ### openCard(slotId, metadata) -- announces that a slot card should become active without mutating slot payload arrays
+### showEditor(metadata) -- toggles editor visibility through a QuickFlux directive action payload
+### hideEditor(metadata) -- hides the editor pane by dispatching a namespaced directive without slot payloads
+### persistSlot(slotId, slotState, metadata) -- queues a persistence lifecycle request mirroring the canonical slot payload contract
 
 ## Properties
 ### structuralCloner -- helper object that deeply clones JSON-compatible data structures prior to dispatching
 ### actionRegistry -- central registry exposing namespaced action keys and lifecycle helpers
 ### directiveComposer -- metadata composer that derives lifecycle descriptors for payload annotations
 ### payloadComposer -- normalizes slot payload arrays and merges directive metadata for dispatcher consumption
+### dispatchCoordinator -- consolidates slot lifecycle and directive dispatch helpers routed through the QuickFlux dispatcher
 ### dispatchRelay -- abstraction over `AppDispatcher.dispatch()` that emits QuickFlux actions
 
 ## signals
@@ -108,27 +112,38 @@ Singleton `ActionCreator` façade that normalizes legacy slot payload structures
 Singleton QuickFlux store that hydrates powerup editor slot data from persistence, normalizes legacy payloads, and exposes observable arrays for QML workflows.
 
 ## Functions
+### commitVisibility() -- synchronizes exported visibility properties from the visibility coordinator.
+### commitPersistence() -- propagates persistence queue snapshots and pending metadata to observers.
 ### commitState() -- refreshes exported store properties after coordinated state changes or focus updates.
 
 ## Properties
 ### isHydrated -- indicates whether the persistence bootstrap completed successfully.
 ### isLoading -- flags when the store is currently reading from persistence.
+### isEditorVisible -- true when the editor should be rendered for consumers listening to the store.
+### visibilityDirective -- most recent directive metadata describing how visibility was toggled.
+### persistenceQueue -- queued persistence requests awaiting downstream handling.
+### lastPersistenceRequest -- latest persistence payload emitted by the coordinator.
+### hasPendingPersistence -- convenience flag indicating whether persistenceQueue is non-empty.
 ### slotRecords -- canonical map of slot records keyed by slot id.
 ### slotArrays -- aggregated object containing `slot_grids`, `slot_targets`, `slot_types`, `slot_amounts`, `slot_colors`, and `slot_energy` arrays aligned by slot id.
 ### slotAssignments -- array of assignment lists derived from persistence metadata per slot.
 ### slotNames -- resolved display names for each slot index.
 ### slotOrder -- ordered list of available slot identifiers maintained by the state coordinator.
 ### activeSlotId -- currently focused slot id managed by the selection coordinator.
-### tokens -- registry exposing the QuickFlux action keys for create/edit/delete/open lifecycles.
+### tokens -- registry exposing the QuickFlux action keys for create/edit/delete/open/show/hide/persist lifecycles.
+### dispatcherMetadata -- helper utilities to derive lifecycle directives from action keys and payloads.
 ### cloning -- structural cloning helper shared by translators and aggregators.
 ### schema -- canonical definitions for slot keys, defaults, and normalization helpers.
 ### blueprint -- record constructor that composes canonical snapshots from arbitrary payloads.
 ### persistenceBridge -- wrapper around `SQLDataStorage` providing row retrieval and decoding helpers.
 ### translator -- converts persistence/action payloads or legacy maps into canonical records.
+### persistenceCoordinator -- aggregates canonical persistence requests for downstream storage integration.
 ### selectionCoordinator -- maintains focused slot state and ensures focus stability as slots change.
 ### stateCoordinator -- orchestrates record storage, aggregated arrays, and export snapshots for observers.
 ### hydrationLifecycle -- controls initial bootstrap and hydration status flags.
 ### mutationCoordinator -- routes QuickFlux lifecycle events into state mutations and focus updates.
+### visibilityCoordinator -- manages editor visibility state and directive metadata extracted from actions.
+### initializationCoordinator -- bootstraps store hydration and establishes initial visibility/persistence snapshots.
 
 ## signals
 ### None
@@ -1149,6 +1164,7 @@ High-level editor container that composes the catalog list and card view around 
 ### storeFacade -- façade exposing store state, canonical extractors, and dispatch helpers.
 ### catalogCoordinator -- helper object binding catalog state to `PowerupCatalogList`.
 ### cardCoordinator -- helper object binding slot state to `PowerupCardView`.
+### visible -- bound to the QuickFlux store’s `isEditorVisible` flag so actions can toggle the pane.
 
 ## signals
 ### None

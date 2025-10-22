@@ -11,6 +11,12 @@ Store {
     property bool isHydrated: hydrationLifecycle.isHydrated
     property bool isLoading: hydrationLifecycle.isLoading
 
+    property bool isEditorVisible: false
+    property var visibilityDirective: ({})
+    property var persistenceQueue: ([])
+    property var lastPersistenceRequest: null
+    property bool hasPendingPersistence: false
+
     property var slotRecords: ({})
     property var slotArrays: ({})
     property var slotAssignments: ([])
@@ -23,6 +29,53 @@ Store {
         property string edit: Actions.ActionTypes.powerupEditorEditSlot
         property string remove: Actions.ActionTypes.powerupEditorDeleteSlot
         property string open: Actions.ActionTypes.powerupEditorOpenCard
+        property string show: Actions.ActionTypes.powerupEditorShowDialog
+        property string hide: Actions.ActionTypes.powerupEditorHideDialog
+        property string persist: Actions.ActionTypes.powerupEditorPersistSlot
+    }
+
+    readonly property QtObject dispatcherMetadata: QtObject {
+        function lifecycleFrom(actionKey) {
+            if (!actionKey) {
+                return ""
+            }
+            var tokens = actionKey.split(".")
+            return tokens.length > 0 ? tokens[tokens.length - 1] : actionKey
+        }
+
+        function namespaceFrom(payload) {
+            if (payload && payload.namespace !== undefined) {
+                return payload.namespace
+            }
+            return Actions.ActionTypes.powerupEditorNamespace
+        }
+
+        function directive(actionKey, payload) {
+            var descriptor = {}
+            descriptor.namespace = namespaceFrom(payload)
+            var lifecycle = payload && payload.lifecycle !== undefined
+                    ? payload.lifecycle
+                    : lifecycleFrom(actionKey)
+            if (lifecycle && lifecycle.length > 0) {
+                descriptor.lifecycle = lifecycle
+            }
+            var slotId = translator.slotIdFrom(payload)
+            if (slotId !== null) {
+                descriptor.slotId = slotId
+            }
+            if (payload) {
+                if (payload.origin !== undefined) {
+                    descriptor.origin = payload.origin
+                }
+                if (payload.reason !== undefined) {
+                    descriptor.reason = payload.reason
+                }
+                if (payload.source !== undefined) {
+                    descriptor.source = payload.source
+                }
+            }
+            return descriptor
+        }
     }
 
     readonly property QtObject cloning: QtObject {
@@ -36,6 +89,67 @@ Store {
                 console.warn("[PowerupEditorStore] Failed to deep clone value:", error)
                 return value
             }
+        }
+    }
+
+    readonly property QtObject visibilityCoordinator: QtObject {
+        property bool isVisible: false
+        property var directive: ({})
+
+        readonly property QtObject extractor: QtObject {
+            function fromAction(actionKey, payload) {
+                var descriptor = dispatcherMetadata.directive(actionKey, payload)
+                descriptor.timestamp = Date.now()
+                return descriptor
+            }
+
+            function fromMetadata(metadata) {
+                var meta = metadata || {}
+                var descriptor = {}
+                var namespace = meta.namespace !== undefined
+                        ? meta.namespace
+                        : Actions.ActionTypes.powerupEditorNamespace
+                descriptor.namespace = namespace
+                if (meta.lifecycle !== undefined) {
+                    descriptor.lifecycle = meta.lifecycle
+                }
+                if (meta.slotId !== undefined) {
+                    descriptor.slotId = meta.slotId
+                }
+                if (meta.origin !== undefined) {
+                    descriptor.origin = meta.origin
+                }
+                if (meta.reason !== undefined) {
+                    descriptor.reason = meta.reason
+                }
+                if (meta.source !== undefined) {
+                    descriptor.source = meta.source
+                }
+                descriptor.timestamp = Date.now()
+                return descriptor
+            }
+        }
+
+        function showFrom(actionKey, payload) {
+            apply(true, extractor.fromAction(actionKey, payload))
+        }
+
+        function hideFrom(actionKey, payload) {
+            apply(false, extractor.fromAction(actionKey, payload))
+        }
+
+        function show(metadata) {
+            apply(true, extractor.fromMetadata(metadata))
+        }
+
+        function hide(metadata) {
+            apply(false, extractor.fromMetadata(metadata))
+        }
+
+        function apply(visible, descriptor) {
+            isVisible = visible
+            directive = cloning.deep(descriptor || {})
+            store.commitVisibility()
         }
     }
 
@@ -459,6 +573,78 @@ Store {
         }
     }
 
+    readonly property QtObject persistenceCoordinator: QtObject {
+        property var queue: ([])
+        property var lastRequest: null
+        property bool hasPending: false
+
+        readonly property QtObject contract: QtObject {
+            function fromAction(actionKey, payload) {
+                var record = translator.fromAction(payload)
+                var fallbackId = translator.slotIdFrom(payload)
+                if (!record && fallbackId !== null) {
+                    record = blueprint.compose(fallbackId, payload ? payload.name : undefined, payload ? payload.slot_assignments : undefined, payload, payload ? payload.data : undefined)
+                }
+                if (!record) {
+                    return null
+                }
+                var descriptor = dispatcherMetadata.directive(actionKey, payload)
+                var payloadSnapshot = snapshotFromRecord(record)
+                if (!payloadSnapshot) {
+                    return null
+                }
+                return finalize(descriptor, payloadSnapshot)
+            }
+
+            function snapshotFromRecord(record) {
+                if (!record) {
+                    return null
+                }
+                var snapshot = {
+                    slot_id: record.id,
+                    name: record.name,
+                    slot_assignments: cloning.deep(record.assignments || []),
+                    data: cloning.deep(record.data || {})
+                }
+                for (var i = 0; i < schema.canonicalKeys.length; ++i) {
+                    var key = schema.canonicalKeys[i]
+                    snapshot[key] = cloning.deep(record.state ? record.state[key] : undefined)
+                }
+                return snapshot
+            }
+
+            function finalize(directive, payloadSnapshot) {
+                var descriptor = cloning.deep(directive || {})
+                descriptor.timestamp = Date.now()
+                return {
+                    namespace: descriptor.namespace || Actions.ActionTypes.powerupEditorNamespace,
+                    lifecycle: descriptor.lifecycle || "",
+                    slotId: descriptor.slotId !== undefined ? descriptor.slotId : payloadSnapshot.slot_id,
+                    directive: descriptor,
+                    payload: payloadSnapshot
+                }
+            }
+        }
+
+        function capture(actionKey, payload) {
+            var entry = contract.fromAction(actionKey, payload)
+            if (!entry) {
+                return
+            }
+            queue = queue.concat([entry])
+            lastRequest = entry
+            hasPending = queue.length > 0
+            store.commitPersistence()
+        }
+
+        function clear() {
+            queue = []
+            lastRequest = null
+            hasPending = false
+            store.commitPersistence()
+        }
+    }
+
     readonly property QtObject selectionCoordinator: QtObject {
         property int focusedSlot: -1
 
@@ -689,6 +875,8 @@ Store {
         filter: tokens.create
         onDispatched: function (type, payload) {
             mutationCoordinator.ingest(payload)
+            persistenceCoordinator.capture(type, payload)
+            visibilityCoordinator.showFrom(type, payload)
         }
     }
 
@@ -696,6 +884,8 @@ Store {
         filter: tokens.edit
         onDispatched: function (type, payload) {
             mutationCoordinator.update(payload)
+            persistenceCoordinator.capture(type, payload)
+            visibilityCoordinator.showFrom(type, payload)
         }
     }
 
@@ -703,6 +893,7 @@ Store {
         filter: tokens.remove
         onDispatched: function (type, payload) {
             mutationCoordinator.remove(payload)
+            persistenceCoordinator.capture(type, payload)
         }
     }
 
@@ -710,7 +901,40 @@ Store {
         filter: tokens.open
         onDispatched: function (type, payload) {
             mutationCoordinator.open(payload)
+            visibilityCoordinator.showFrom(type, payload)
         }
+    }
+
+    AppListener {
+        filter: tokens.show
+        onDispatched: function (type, payload) {
+            visibilityCoordinator.showFrom(type, payload)
+        }
+    }
+
+    AppListener {
+        filter: tokens.hide
+        onDispatched: function (type, payload) {
+            visibilityCoordinator.hideFrom(type, payload)
+        }
+    }
+
+    AppListener {
+        filter: tokens.persist
+        onDispatched: function (type, payload) {
+            persistenceCoordinator.capture(type, payload)
+        }
+    }
+
+    function commitVisibility() {
+        isEditorVisible = visibilityCoordinator.isVisible
+        visibilityDirective = cloning.deep(visibilityCoordinator.directive || {})
+    }
+
+    function commitPersistence() {
+        persistenceQueue = cloning.deep(persistenceCoordinator.queue || [])
+        lastPersistenceRequest = cloning.deep(persistenceCoordinator.lastRequest)
+        hasPendingPersistence = !!persistenceCoordinator.hasPending
     }
 
     function commitState() {
@@ -722,5 +946,14 @@ Store {
         activeSlotId = selectionCoordinator.focusedSlot
     }
 
-    Component.onCompleted: hydrationLifecycle.bootstrap()
+    readonly property QtObject initializationCoordinator: QtObject {
+        function start() {
+            commitPersistence()
+            commitVisibility()
+            hydrationLifecycle.bootstrap()
+            visibilityCoordinator.show({ reason: "bootstrap" })
+        }
+    }
+
+    Component.onCompleted: initializationCoordinator.start()
 }
