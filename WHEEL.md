@@ -103,6 +103,37 @@ Singleton `ActionCreator` façade that normalizes legacy slot payload structures
 ### None
 
 
+# quickflux/PowerupEditorStore.qml
+## File details
+Singleton QuickFlux store that hydrates powerup editor slot data from persistence, normalizes legacy payloads, and exposes observable arrays for QML workflows.
+
+## Functions
+### commitState() -- refreshes exported store properties after coordinated state changes or focus updates.
+
+## Properties
+### isHydrated -- indicates whether the persistence bootstrap completed successfully.
+### isLoading -- flags when the store is currently reading from persistence.
+### slotRecords -- canonical map of slot records keyed by slot id.
+### slotArrays -- aggregated object containing `slot_grids`, `slot_targets`, `slot_types`, `slot_amounts`, `slot_colors`, and `slot_energy` arrays aligned by slot id.
+### slotAssignments -- array of assignment lists derived from persistence metadata per slot.
+### slotNames -- resolved display names for each slot index.
+### slotOrder -- ordered list of available slot identifiers maintained by the state coordinator.
+### activeSlotId -- currently focused slot id managed by the selection coordinator.
+### tokens -- registry exposing the QuickFlux action keys for create/edit/delete/open lifecycles.
+### cloning -- structural cloning helper shared by translators and aggregators.
+### schema -- canonical definitions for slot keys, defaults, and normalization helpers.
+### blueprint -- record constructor that composes canonical snapshots from arbitrary payloads.
+### persistenceBridge -- wrapper around `SQLDataStorage` providing row retrieval and decoding helpers.
+### translator -- converts persistence/action payloads or legacy maps into canonical records.
+### selectionCoordinator -- maintains focused slot state and ensures focus stability as slots change.
+### stateCoordinator -- orchestrates record storage, aggregated arrays, and export snapshots for observers.
+### hydrationLifecycle -- controls initial bootstrap and hydration status flags.
+### mutationCoordinator -- routes QuickFlux lifecycle events into state mutations and focus updates.
+
+## signals
+### None
+
+
 # Blockwars8/actions/AppActions.qml
 ## File details
 Singleton `ActionCreator` wrapper that provides ergonomic functions to dispatch all app actions through QuickFlux.

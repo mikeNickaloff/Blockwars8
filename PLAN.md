@@ -1,3 +1,16 @@
+# Change 1 - PowerupEditorStore Hydration Layer
+## Status
+- Complete
+## Context
+- QuickFlux powerup editor actions need a singleton store that exposes observable slot state derived from the legacy dialog schema.
+- Implementation Step 2 of Change 1 mandates translating persisted slot payloads into a QML-first workflow without replacing existing persistence utilities.
+## Proposed Changes
+- Instantiate a `PowerupEditorStore` QuickFlux singleton that bootstraps from the `localPowerupData` table through the shared `SQLDataStorage` helper.
+- Compose nested helper objects (token registry, cloning utilities, translators, state coordinators, selection coordinators) to normalize legacy payloads into canonical slot arrays and metadata snapshots.
+- Wire action listeners for create, edit, delete, and open-card lifecycles so downstream QML components can react to slot mutations via observable properties.
+## Questions / Comments
+- None.
+
 # Change 2 - Reusable SQLDataStorage QML Helper
 ## Status
 - Pending
