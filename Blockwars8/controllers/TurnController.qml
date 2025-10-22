@@ -15,7 +15,162 @@ Item {
     property int activeGrid: -1
     property int attackerGridId: -1
     property int defenderGridId: -1
-    property var stateByGrid: ({})
+
+    QtObject {
+        id: turnStateCoordinator
+
+        property var states: ({})
+        property var pendingHandOff: null
+
+        function keyFor(gridId) {
+            return String(gridId)
+        }
+
+        function clear() {
+            states = ({})
+            pendingHandOff = null
+        }
+
+        function ensure(gridId) {
+            var key = keyFor(gridId)
+            if (!states.hasOwnProperty(key)) {
+                states[key] = {
+                    gridId: gridId,
+                    movesAllowed: 0,
+                    movesRemaining: 0,
+                    swapsStarted: 0,
+                    pendingLaunches: 0,
+                    awaitingSettlement: false,
+                    phase: "idle",
+                    blocksEnabled: false,
+                    pendingMove: false
+                }
+            }
+            return states[key]
+        }
+
+        function resetForTurn(gridId, moves) {
+            var state = ensure(gridId)
+            state.movesAllowed = moves
+            state.movesRemaining = moves
+            state.swapsStarted = 0
+            state.pendingLaunches = 0
+            state.awaitingSettlement = true
+            state.phase = "settling"
+            state.blocksEnabled = false
+            state.pendingMove = false
+            return state
+        }
+
+        function configureOpponent(gridId) {
+            var state = ensure(gridId)
+            state.movesRemaining = 0
+            state.swapsStarted = 0
+            state.pendingLaunches = 0
+            state.awaitingSettlement = false
+            state.phase = "waitingOpponent"
+            state.pendingMove = false
+            return state
+        }
+
+        function canStartSwap(gridId) {
+            var state = ensure(gridId)
+            return state.swapsStarted < state.movesAllowed
+        }
+
+        function markSwapStarted(gridId) {
+            var state = ensure(gridId)
+            state.swapsStarted += 1
+            state.movesRemaining = Math.max(0, state.movesAllowed - state.swapsStarted)
+            state.pendingLaunches += 1
+            state.awaitingSettlement = true
+            state.phase = "resolving"
+            state.pendingMove = true
+            return {
+                state: state,
+                quotaReached: state.swapsStarted >= state.movesAllowed
+            }
+        }
+
+        function markAnimationsCompleted(gridId) {
+            var state = ensure(gridId)
+            if (state.pendingLaunches > 0) {
+                state.pendingLaunches -= 1
+            }
+            state.pendingMove = false
+            state.phase = state.awaitingSettlement ? "settling" : (state.swapsStarted >= state.movesAllowed ? "exhausted" : "awaitingInput")
+            return state
+        }
+
+        function markSettlement(gridId, hasEmpty) {
+            var state = ensure(gridId)
+            if (hasEmpty === true) {
+                state.awaitingSettlement = true
+                state.phase = "settling"
+            } else {
+                state.awaitingSettlement = false
+                state.phase = state.swapsStarted >= state.movesAllowed ? "exhausted" : "awaitingInput"
+            }
+            if (pendingHandOff && pendingHandOff.attackerId === gridId && hasEmpty !== true) {
+                pendingHandOff.awaitingSettlement = false
+            }
+            return state
+        }
+
+        function readyForInput(gridId) {
+            var state = ensure(gridId)
+            return state.swapsStarted < state.movesAllowed && state.pendingLaunches === 0 && state.awaitingSettlement === false
+        }
+
+        function swapQuotaSatisfied(gridId) {
+            var state = ensure(gridId)
+            return state.swapsStarted >= state.movesAllowed
+        }
+
+        function canFinishTurn(gridId) {
+            var state = ensure(gridId)
+            return swapQuotaSatisfied(gridId) && state.pendingLaunches === 0 && state.awaitingSettlement === false
+        }
+
+        function recordBlocksEnabled(gridId, enabled) {
+            ensure(gridId).blocksEnabled = enabled === true
+        }
+
+        function planHandOff(fromGridId, toGridId, moves) {
+            pendingHandOff = {
+                attackerId: toGridId,
+                defenderId: fromGridId,
+                moves: moves,
+                awaitingSettlement: true
+            }
+        }
+
+        function hasPendingHandOff(gridId) {
+            return pendingHandOff && pendingHandOff.attackerId === gridId
+        }
+
+        function markHandOffReadyIfSettled(gridId) {
+            if (pendingHandOff && pendingHandOff.attackerId === gridId) {
+                var state = ensure(gridId)
+                if (state.awaitingSettlement === false) {
+                    pendingHandOff.awaitingSettlement = false
+                }
+            }
+        }
+
+        function consumeHandOff(gridId) {
+            if (pendingHandOff && pendingHandOff.attackerId === gridId && pendingHandOff.awaitingSettlement === false) {
+                var nextTurn = pendingHandOff
+                pendingHandOff = null
+                return nextTurn
+            }
+            return null
+        }
+    }
+
+    function gridState(gridId) {
+        return turnStateCoordinator.ensure(gridId)
+    }
 
     function otherGrid(gridId) {
         if (gridOrder && gridOrder.length > 1) {
@@ -27,30 +182,14 @@ Item {
         return gridId === cpuGridId ? playerGridId : cpuGridId
     }
 
-    function ensureState(gridId) {
-        var key = String(gridId)
-        if (!stateByGrid.hasOwnProperty(key)) {
-            stateByGrid[key] = {
-                movesRemaining: 0,
-                phase: "idle",
-                awaitingReadySignal: false,
-                awaitingSettlement: false,
-                pendingMove: false,
-                blocksEnabled: false
-            }
-        }
-        return stateByGrid[key]
-    }
-
     function resetAllState() {
-        stateByGrid = ({})
+        turnStateCoordinator.clear()
         activeGrid = -1
         attackerGridId = -1
         defenderGridId = -1
     }
 
     function beginTurn(gridId, options) {
-        var state = ensureState(gridId)
         var moves = movesPerTurn
         if (options && options.moves !== undefined) {
             moves = options.moves
@@ -59,11 +198,8 @@ Item {
         defenderGridId = otherGrid(gridId)
         activeGrid = gridId
 
-        state.movesRemaining = moves
-        state.phase = "settling"
-        state.awaitingReadySignal = false
-        state.awaitingSettlement = true
-        state.pendingMove = false
+        var attackerState = turnStateCoordinator.resetForTurn(gridId, moves)
+        turnStateCoordinator.configureOpponent(defenderGridId)
 
         AppActions.enableBlocks(gridId, false)
         AppActions.beginFillCycle(gridId, "turnStart")
@@ -73,17 +209,17 @@ Item {
         AppActions.setFillingEnabled(defenderGridId, false)
         AppActions.setLaunchOnMatchEnabled(defenderGridId, false)
 
-        var defenderState = ensureState(defenderGridId)
-        defenderState.phase = "waitingOpponent"
-        defenderState.pendingMove = false
-        defenderState.awaitingReadySignal = false
-        defenderState.awaitingSettlement = false
-
         AppActions.turnCycleTurnBegan({
                                            "grid_id": gridId,
                                            "defender_grid_id": defenderGridId,
-                                           "moves_remaining": state.movesRemaining
+                                           "moves_remaining": attackerState.movesRemaining,
+                                           "phase": attackerState.phase
                                        })
+        AppActions.turnCycleTurnResolving({
+                                               "grid_id": gridId,
+                                               "moves_remaining": attackerState.movesRemaining,
+                                               "phase": attackerState.phase
+                                           })
         AppActions.setActiveGrid(gridId)
     }
 
@@ -92,18 +228,21 @@ Item {
         if (gridId !== activeGrid) {
             return
         }
-        var state = ensureState(gridId)
-        if (state.phase !== "awaitingInput") {
+        if (!turnStateCoordinator.readyForInput(gridId)) {
             return
         }
-        state.movesRemaining = Math.max(0, state.movesRemaining - 1)
-        state.phase = "resolving"
-        state.pendingMove = true
-        state.awaitingReadySignal = false
-        state.awaitingSettlement = true
+        var swapResult = turnStateCoordinator.markSwapStarted(gridId)
+        AppActions.turnCycleTurnResolving({
+                                               "grid_id": gridId,
+                                               "moves_remaining": swapResult.state.movesRemaining,
+                                               "phase": swapResult.state.phase
+                                           })
+        if (swapResult.quotaReached) {
+            AppActions.enableBlocks(gridId, false)
+        }
         AppActions.swapLaunchingStarted({
                                              "grid_id": gridId,
-                                             "moves_remaining": state.movesRemaining,
+                                             "moves_remaining": swapResult.state.movesRemaining,
                                              "row": data.row,
                                              "column": data.column,
                                              "direction": data.direction
@@ -115,14 +254,16 @@ Item {
         if (gridId !== activeGrid) {
             return
         }
-        var state = ensureState(gridId)
-        if (!state.pendingMove) {
+        var state = gridState(gridId)
+        if (!state.pendingMove && state.pendingLaunches === 0) {
             return
         }
-        state.pendingMove = false
-        state.phase = "settling"
-        state.awaitingReadySignal = false
-        state.awaitingSettlement = true
+        state = turnStateCoordinator.markAnimationsCompleted(gridId)
+        AppActions.turnCycleTurnResolving({
+                                               "grid_id": gridId,
+                                               "moves_remaining": state.movesRemaining,
+                                               "phase": state.phase
+                                           })
     }
 
     function handleGridSettled(info) {
@@ -130,53 +271,76 @@ Item {
             return
         }
         var gridId = info.grid_id
-        var state = ensureState(gridId)
+        var state = turnStateCoordinator.markSettlement(gridId, info.has_empty === true)
         if (info.has_empty === true) {
-            state.awaitingSettlement = true
             AppActions.beginFillCycle(gridId, "autoFill")
             return
         }
-        state.awaitingSettlement = false
+        var pendingTurn = turnStateCoordinator.consumeHandOff(gridId)
+        if (pendingTurn) {
+            beginTurn(gridId, {
+                          "moves": pendingTurn.moves
+                      })
+            return
+        }
         if (gridId === activeGrid) {
-            if (state.movesRemaining <= 0) {
+            if (turnStateCoordinator.canFinishTurn(gridId)) {
                 finishTurn(gridId)
-            } else {
-                state.phase = "awaitingInput"
+            } else if (turnStateCoordinator.readyForInput(gridId)) {
+                AppActions.turnCycleTurnReady({
+                                                 "grid_id": gridId,
+                                                 "moves_remaining": state.movesRemaining,
+                                                 "phase": state.phase
+                                             })
                 AppActions.enableBlocks(gridId, true)
                 if (gridId === cpuGridId) {
                     maybeRequestCpuMove()
                 }
+            } else {
+                AppActions.turnCycleTurnResolving({
+                                                   "grid_id": gridId,
+                                                   "moves_remaining": state.movesRemaining,
+                                                   "phase": state.phase
+                                               })
             }
         } else {
-            ensureState(gridId).phase = "waitingOpponent"
+            state.phase = "waitingOpponent"
         }
     }
 
     function finishTurn(gridId) {
         var nextGrid = otherGrid(gridId)
-        var attackerState = ensureState(gridId)
+        var attackerState = gridState(gridId)
         attackerState.phase = "waitingOpponent"
         attackerState.awaitingSettlement = false
         attackerState.pendingMove = false
         AppActions.enableBlocks(gridId, false)
+        AppActions.turnCycleTurnResolving({
+                                           "grid_id": nextGrid,
+                                           "moves_remaining": movesPerTurn,
+                                           "phase": "waitingHandshake"
+                                       })
+        turnStateCoordinator.planHandOff(gridId, nextGrid, movesPerTurn)
+        activeGrid = -1
+        turnStateCoordinator.markHandOffReadyIfSettled(nextGrid)
+        var readyTurn = turnStateCoordinator.consumeHandOff(nextGrid)
         AppActions.requestNextTurn({
                                         "from_grid_id": gridId,
                                         "to_grid_id": nextGrid
                                     })
-        beginTurn(nextGrid, {
-                      "moves": movesPerTurn
-                  })
+        if (readyTurn) {
+            beginTurn(nextGrid, {
+                          "moves": readyTurn.moves
+                      })
+        }
     }
 
     function maybeRequestCpuMove() {
         if (activeGrid !== cpuGridId) {
             return
         }
-        var state = ensureState(cpuGridId)
-        if (state.phase !== "awaitingInput") {
-            return
-        }
-        if (state.movesRemaining <= 0) {
+        var state = gridState(cpuGridId)
+        if (!turnStateCoordinator.readyForInput(cpuGridId)) {
             return
         }
         AppActions.cpuRequestMove({
@@ -193,8 +357,8 @@ Item {
             movesPerTurn = data && data.moves !== undefined ? data.moves : movesPerTurn
             var attacker = data && data.attacker_grid_id !== undefined ? data.attacker_grid_id : playerGridId
             var defender = data && data.defender_grid_id !== undefined ? data.defender_grid_id : otherGrid(attacker)
-            ensureState(attacker)
-            ensureState(defender)
+            gridState(attacker)
+            gridState(defender)
             beginTurn(attacker, {
                           "moves": movesPerTurn
                       })
@@ -212,7 +376,7 @@ Item {
         filter: ActionTypes.enableBlocks
         onDispatched: function(type, data) {
             // Track block state if needed; turn controller now manages enabling
-            ensureState(data.grid_id).blocksEnabled = data.blocks_enabled
+            turnStateCoordinator.recordBlocksEnabled(data.grid_id, data.blocks_enabled)
         }
     }
 
@@ -254,9 +418,10 @@ Item {
             if (data.grid_id !== activeGrid) {
                 return
             }
-            var state = ensureState(activeGrid)
+            var state = gridState(activeGrid)
             state.movesRemaining = 0
             state.pendingMove = false
+            state.swapsStarted = state.movesAllowed
             finishTurn(activeGrid)
         }
     }

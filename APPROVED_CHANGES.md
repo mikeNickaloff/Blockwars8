@@ -1,6 +1,6 @@
 # Change 1 - Pure QML Powerup Editor QuickFlux Action
 ## Status
-- WIP
+- Completed
 
 ## Context
 - Recent AGENTS.md updates reaffirm the requirement to drive new work through PLAN.md with tightly scoped implementation steps.
@@ -20,3 +20,24 @@
 - WIP (Change 1) — QuickFlux action namespace scaffolded for slot lifecycle events.
 - WIP (Change 1) — QML editor view composed with catalog and card abstractions.
 - WIP (Change 1) — QuickFlux action wiring now governs editor visibility and persistence queues.
+
+# Change 3 - Turn Cycle Coordination Overhaul
+## Status
+- Completed
+
+## Context
+- Swaps, launches, and settlement acknowledgements are tracked through scattered booleans in `TurnController`, letting turns end before all work completes.
+- `GameGrid` immediately re-enables input for the newly active player when `setActiveGrid` fires, even if the turn handoff should stay locked until settlement finishes.
+- UI elements lack clear signals differentiating resolving vs. ready states, so turn counters and prompts desync from the actual playable window.
+
+## Implementation Steps
+- [x] Introduce a coordinator QtObject inside `TurnController` that encapsulates per-grid counters (swap quota, launch debt, settlement flags) and exposes helpers for `beginTurn()`, swap events, and settlement notifications.
+- [x] Update `handleSwapStarted`, `handleAnimationsCompleted`, and `handleGridSettled` to defer to the coordinator, enforce a three-swap quota per turn, and call `finishTurn()` only after quota and launch debt clear.
+- [x] Adjust `finishTurn()` to wait for the defender grid’s `gridSettled` handshake before enabling that grid’s input and dispatching `setActiveGrid`.
+- [x] Rework `GameGrid`’s `setActiveGrid` listener to stop toggling block input directly, responding instead to `enableBlocks` and new resolving/ready actions.
+- [x] Emit/listen for new QuickFlux actions representing resolving vs. ready states so UI controls and turn counters react when the controller unlocks input.
+
+## Status History
+- Approved (Change 3) — Turn coordination overhaul ready for implementation.
+- WIP (Change 3) — Implementation in progress per coordinator design.
+- Completed (Change 3) — Coordinator-driven turn gating deployed with resolving/ready signaling.

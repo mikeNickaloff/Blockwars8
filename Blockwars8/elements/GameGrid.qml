@@ -36,6 +36,7 @@ Item {
     property var initialFill: true
     property var activeTurn: true
     property var turns: 3
+    property string turnPhase: "idle"
 
     ParticleSystem {
         id: particleSystem
@@ -140,14 +141,51 @@ Item {
     AppListener {
         filter: ActionTypes.setActiveGrid
         onDispatched: function (dtype, ddata) {
-            if (ddata.grid_id == grid_id) {
+            activeTurn = ddata.grid_id == grid_id;
+            if (!activeTurn) {
+                turns = 0;
+                turnPhase = "waitingOpponent";
+            }
+        }
+    }
+
+    AppListener {
+        filter: ActionTypes.turnCycleTurnBegan
+        onDispatched: function (dtype, ddata) {
+            if (ddata.grid_id === grid_id) {
                 activeTurn = true;
-                turns = 3;
-                AppActions.enableBlocks(grid_id, true)
-            } else {
+                if (ddata.moves_remaining !== undefined) {
+                    turns = ddata.moves_remaining;
+                }
+                turnPhase = ddata.phase !== undefined ? ddata.phase : "settling";
+            } else if (ddata.defender_grid_id === grid_id) {
                 activeTurn = false;
                 turns = 0;
-                AppActions.enableBlocks(grid_id, false)
+                turnPhase = "waitingOpponent";
+            }
+        }
+    }
+
+    AppListener {
+        filter: ActionTypes.turnCycleTurnResolving
+        onDispatched: function (dtype, ddata) {
+            if (ddata.grid_id === grid_id) {
+                if (ddata.moves_remaining !== undefined) {
+                    turns = ddata.moves_remaining;
+                }
+                turnPhase = ddata.phase !== undefined ? ddata.phase : "resolving";
+            }
+        }
+    }
+
+    AppListener {
+        filter: ActionTypes.turnCycleTurnReady
+        onDispatched: function (dtype, ddata) {
+            if (ddata.grid_id === grid_id) {
+                if (ddata.moves_remaining !== undefined) {
+                    turns = ddata.moves_remaining;
+                }
+                turnPhase = ddata.phase !== undefined ? ddata.phase : "awaitingInput";
             }
         }
     }
