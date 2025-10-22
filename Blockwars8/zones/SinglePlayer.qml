@@ -14,19 +14,52 @@ import QtQuick.LocalStorage 2.15
 import com.blockwars 1.0
 import "../elements" 1.0
 import "../controllers" 1.0
+import "../../quickflux" 1.0 as Editor
 
 Rectangle {
     id: gameRoot
-    visible: false
+    visible: hydrationCoordinator.isSceneVisible
     color: "black"
-    PowerupEditor {
-        id: hiddenLoader
-        onPowerupsLoaded: {
-            gameRoot.visible = true
-            hiddenLoader.closeDialog()
-            hiddenLoader.destroy()
+    readonly property QtObject editorStore: Editor.PowerupEditorStore
+
+    QtObject {
+        id: hydrationCoordinator
+        property QtObject store: gameRoot.editorStore
+        property bool isSceneVisible: false
+
+        function evaluate() {
+            if (!store) {
+                return
+            }
+            if (store.isHydrated && !store.isLoading) {
+                if (!isSceneVisible) {
+                    isSceneVisible = true
+                }
+            }
+        }
+
+        function resetIfLoading() {
+            if (!store) {
+                return
+            }
+            if (store.isLoading && isSceneVisible) {
+                isSceneVisible = false
+            }
         }
     }
+
+    Connections {
+        target: hydrationCoordinator.store
+        function onIsHydratedChanged() {
+            hydrationCoordinator.evaluate()
+        }
+        function onIsLoadingChanged() {
+            hydrationCoordinator.resetIfLoading()
+            hydrationCoordinator.evaluate()
+        }
+    }
+
+    Component.onCompleted: hydrationCoordinator.evaluate()
     GameGrid {
         id: gameGrid_top
         grid_id: 0

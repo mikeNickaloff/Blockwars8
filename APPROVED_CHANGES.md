@@ -12,8 +12,8 @@
 - Build a companion `quickflux/PowerupEditorStore.qml` to adapt the legacy dialog data into observable QML state, bridging to existing persistence helpers for loading and saving powerup metadata.
 - [x] Compose a pure-QML editor flow with high-level components such as `PowerupEditorView.qml`, `PowerupCardView.qml`, and `PowerupCatalogList.qml`, ensuring each card interaction delegates to abstract helper types instead of inline logic.
 - [x] Wire QuickFlux actions to drive dialog visibility, card selection, and persistence operations so the runtime data contract remains compatible with the current JSON structures consumed elsewhere.
-- Persist created and edited entries to a `localPowerupData` LocalStorage table via the forthcoming `SQLDataStorage.qml`, encoding `assignments` and `data` payloads with shared `toHex()`/`fromHex()` utilities while maintaining slot assignment arrays (`SinglePlayerSlot1`…`MultiplayerSlot4`).
-- Update supporting documentation (PLAN.md status changes, APPROVED_CHANGES.md status, TODO.md tasks, WHEEL.md summaries) as milestones are reached during implementation.
+- [x] Persist created and edited entries to a `localPowerupData` LocalStorage table via the forthcoming `SQLDataStorage.qml`, encoding `assignments` and `data` payloads with shared `toHex()`/`fromHex()` utilities while maintaining slot assignment arrays (`SinglePlayerSlot1`…`MultiplayerSlot4`).
+- [x] Update supporting documentation (PLAN.md status changes, APPROVED_CHANGES.md status, TODO.md tasks, WHEEL.md summaries) as milestones are reached during implementation.
 
 ## Status History
 - Approved (Change 1) — awaiting implementation kickoff.

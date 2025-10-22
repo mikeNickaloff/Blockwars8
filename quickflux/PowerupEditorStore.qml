@@ -432,6 +432,26 @@ Store {
                 data: cloning.deep(data || {})
             }
         }
+
+        function payload(record) {
+            if (!record) {
+                return null
+            }
+            var canonicalId = schema.canonicalSlotId(record.id)
+            var canonicalName = schema.canonicalName(canonicalId, record.name)
+            var preparedState = canonicalStateFrom(record.state)
+            var payload = {
+                slot_id: canonicalId,
+                name: canonicalName,
+                slot_assignments: schema.assignmentsFrom(record.assignments),
+                data: cloning.deep(record.data || {})
+            }
+            for (var i = 0; i < schema.canonicalKeys.length; ++i) {
+                var keyName = schema.canonicalKeys[i]
+                payload[keyName] = cloning.deep(preparedState[keyName])
+            }
+            return payload
+        }
     }
 
     readonly property QtObject persistenceBridge: QtObject {
@@ -449,6 +469,62 @@ Store {
         function readRows() {
             var rows = storage.selectAll()
             return rows || []
+        }
+
+        readonly property QtObject encoder: QtObject {
+            function assignments(value) {
+                return storage.toHex(schema.assignmentsFrom(value))
+            }
+
+            function payload(payloadObject) {
+                var normalized = payloadObject || {}
+                return storage.toHex(normalized)
+            }
+        }
+
+        readonly property QtObject rowComposer: QtObject {
+            function fromRecord(record) {
+                if (!record) {
+                    return null
+                }
+                var slotId = schema.slotIndex(record.id)
+                if (slotId === null) {
+                    return null
+                }
+                var canonicalName = schema.canonicalName(slotId, record.name)
+                var payloadSnapshot = blueprint.payload(record)
+                return {
+                    id: slotId,
+                    name: canonicalName,
+                    assignments: encoder.assignments(record.assignments),
+                    data: encoder.payload(payloadSnapshot)
+                }
+            }
+
+            function fromMap(map) {
+                var rows = []
+                if (!map) {
+                    return rows
+                }
+                for (var key in map) {
+                    if (!map.hasOwnProperty(key)) {
+                        continue
+                    }
+                    var candidate = map[key]
+                    var row = fromRecord(candidate)
+                    if (!row) {
+                        continue
+                    }
+                    rows.push(row)
+                }
+                rows.sort(function (a, b) { return a.id - b.id })
+                return rows
+            }
+        }
+
+        function writeMap(recordMap) {
+            var rows = rowComposer.fromMap(recordMap)
+            return storage.replaceAll(rows)
         }
 
         function decodeAssignments(row) {
@@ -484,6 +560,28 @@ Store {
                 decoded = {}
             }
             return decoded
+        }
+    }
+
+    readonly property QtObject persistenceLifecycle: QtObject {
+        property bool isProcessing: false
+
+        function synchronize() {
+            var lastSnapshot = cloning.deep(persistenceCoordinator.lastRequest)
+            if (isProcessing || !hydrationLifecycle.isHydrated || !persistenceCoordinator.hasPending) {
+                return { processed: false, lastRequest: lastSnapshot }
+            }
+            isProcessing = true
+            var recordsMap = stateCoordinator.exportRecords()
+            var outcome = persistenceBridge.writeMap(recordsMap)
+            if (!outcome && outcome !== undefined) {
+                console.warn("[PowerupEditorStore] Persistence replaceAll returned unexpected result", outcome)
+            }
+            persistenceCoordinator.queue = []
+            persistenceCoordinator.hasPending = false
+            persistenceCoordinator.lastRequest = lastSnapshot
+            isProcessing = false
+            return { processed: true, lastRequest: lastSnapshot }
         }
     }
 
@@ -833,6 +931,10 @@ Store {
             if (!stateCoordinator.order || stateCoordinator.order.length === 0) {
                 selectionCoordinator.focus(-1)
             }
+            if (persistenceCoordinator.hasPending) {
+                persistenceLifecycle.synchronize()
+                store.commitPersistence()
+            }
         }
     }
 
@@ -932,8 +1034,12 @@ Store {
     }
 
     function commitPersistence() {
+        var summary = persistenceLifecycle.synchronize()
         persistenceQueue = cloning.deep(persistenceCoordinator.queue || [])
-        lastPersistenceRequest = cloning.deep(persistenceCoordinator.lastRequest)
+        var lastSnapshot = summary && summary.lastRequest !== undefined
+                ? summary.lastRequest
+                : cloning.deep(persistenceCoordinator.lastRequest)
+        lastPersistenceRequest = cloning.deep(lastSnapshot)
         hasPendingPersistence = !!persistenceCoordinator.hasPending
     }
 

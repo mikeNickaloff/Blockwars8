@@ -113,8 +113,11 @@ Singleton QuickFlux store that hydrates powerup editor slot data from persistenc
 
 ## Functions
 ### commitVisibility() -- synchronizes exported visibility properties from the visibility coordinator.
-### commitPersistence() -- propagates persistence queue snapshots and pending metadata to observers.
+### commitPersistence() -- flushes pending persistence requests to LocalStorage and refreshes exported queue metadata.
 ### commitState() -- refreshes exported store properties after coordinated state changes or focus updates.
+### blueprint.payload(record) -- generates a canonical persistence payload containing slot metadata and normalized state values.
+### persistenceBridge.writeMap(recordMap) -- encodes the provided slot map into SQL rows and writes them through `replaceAll()`.
+### persistenceLifecycle.synchronize() -- coordinates persistence writes when hydration is complete and pending requests exist.
 
 ## Properties
 ### isHydrated -- indicates whether the persistence bootstrap completed successfully.
@@ -135,9 +138,12 @@ Singleton QuickFlux store that hydrates powerup editor slot data from persistenc
 ### cloning -- structural cloning helper shared by translators and aggregators.
 ### schema -- canonical definitions for slot keys, defaults, and normalization helpers.
 ### blueprint -- record constructor that composes canonical snapshots from arbitrary payloads.
-### persistenceBridge -- wrapper around `SQLDataStorage` providing row retrieval and decoding helpers.
+### persistenceBridge -- wrapper around `SQLDataStorage` providing row retrieval, encoding, and decoding helpers.
+### persistenceBridge.encoder -- hex encoder responsible for assignments and payload serialization.
+### persistenceBridge.rowComposer -- helper that assembles ordered SQL row descriptors from canonical records.
 ### translator -- converts persistence/action payloads or legacy maps into canonical records.
 ### persistenceCoordinator -- aggregates canonical persistence requests for downstream storage integration.
+### persistenceLifecycle -- orchestrates hydration-aware persistence synchronization with the SQL bridge.
 ### selectionCoordinator -- maintains focused slot state and ensures focus stability as slots change.
 ### stateCoordinator -- orchestrates record storage, aggregated arrays, and export snapshots for observers.
 ### hydrationLifecycle -- controls initial bootstrap and hydration status flags.
@@ -410,13 +416,15 @@ Main menu view with four buttons that emits `changeZone` to switch zones.
 
 # Blockwars8/zones/SinglePlayer.qml
 ## File details
-Single-player scene wiring two `GameGrid`s with their `GridController`s and matching `PowerupHud`s.
+Single-player scene wiring two `GameGrid`s with their `GridController`s and matching `PowerupHud`s while gating visibility on editor hydration.
 
 ## Functions
-### None
+### hydrationCoordinator.evaluate() -- promotes scene visibility once the powerup editor store reports hydration complete.
+### hydrationCoordinator.resetIfLoading() -- hides the scene if the store re-enters a loading cycle.
 
 ## Properties
-### None
+### editorStore -- singleton reference to `Editor.PowerupEditorStore` for hydration tracking.
+### hydrationCoordinator -- gatekeeper object monitoring hydration signals to control scene visibility.
 
 ## signals
 ### None
