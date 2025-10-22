@@ -63,6 +63,20 @@ Singleton `KeyTable` of action type keys for QuickFlux dispatch/observe across t
 ### createOneBlock -- action key to create a single block
 ### swapBlocks -- action key to request a swap
 ### enableBlocks -- action key to enable/disable input on a grid
+### beginFillCycle -- action key requesting a grid to kick off a fill cycle
+### setFillingEnabled -- action key toggling whether fills may occur on a grid
+### setLaunchOnMatchEnabled -- action key toggling whether matches trigger launches automatically
+### swapLaunchingStarted -- action key indicating swap resolution began (launch animation pending)
+### swapLaunchingAnimationsDone -- action key reporting swap launch animations completed
+### gridSettled -- action key reporting a grid settled (no empties / cascades resolved)
+### initializeTurnCycle -- action key initializing the turn controller with attacker/defender context
+### requestNextTurn -- action key asking downstream systems to queue the next turn hand-off
+### cpuRequestMove -- action key requesting a CPU-controlled move
+### cpuMoveUnavailable -- action key informing that the CPU has no available moves
+### informGridFillInNeeded -- action key hinting that fill-in work is required
+### turnCycleTurnBegan -- action key broadcasting that a new turn started
+### turnCycleTurnResolving -- action key flagging a grid as resolving its turn work
+### turnCycleTurnReady -- action key signaling that a grid is ready for player interaction
 ### sendNetworkEvent -- action key to emit a network event (abstracted)
 ### receiveNetworkEvent -- action key for receiving a network event
 ### sendNetworkEventDone -- action key indicating local network send completed
@@ -173,6 +187,16 @@ Singleton `ActionCreator` wrapper that provides ergonomic functions to dispatch 
 ### createOneBlock(grid_id, row, column) -- requests creating a block at a cell
 ### swapBlocks(row, column, grid_id, direction) -- requests a swap in a direction from a cell
 ### enableBlocks(grid_id, blocks_enabled) -- toggles input on a grid
+### beginFillCycle(grid_id, reason) -- requests a grid begin a fill cycle with a tagged reason
+### setFillingEnabled(grid_id, enabled) -- toggles filling permission state for a grid
+### setLaunchOnMatchEnabled(grid_id, enabled) -- toggles automatic launch on match for a grid
+### swapLaunchingStarted(payload) -- broadcasts that a swap has begun resolving animations
+### turnCycleTurnBegan(payload) -- announces a new turn with attacker/defender metadata
+### turnCycleTurnResolving(payload) -- flags a grid as mid-resolution so UI can lock input
+### turnCycleTurnReady(payload) -- signals that a grid is ready for interaction this turn
+### requestNextTurn(payload) -- asks downstream handlers to prepare the next attacker grid
+### cpuRequestMove(payload) -- requests that the CPU controller produce its move
+### informGridFillInNeeded(payload) -- hints to listeners that fill-in work is pending
 ### sendNetworkEvent(eventType, eventParams) -- wraps and dispatches a network event
 ### receiveNetworkEvent(params) -- dispatches a received network event for handling
 ### sendNetworkEventDone(eventParams) -- signals that a send completed
@@ -336,14 +360,14 @@ Turn-cycle manager: enforces attacker/defender roles, move limits, settlement/fi
 
 ## Functions
 ### otherGrid(gridId) -- returns the opposite grid id given an id
-### ensureState(gridId) -- retrieves or initializes per-grid turn state
-### resetAllState() -- clears controller and per-grid state
-### beginTurn(gridId, options) -- starts a turn for `gridId`, sets phases, and configures fills/launches
-### handleSwapStarted(data) -- transitions to resolving phase and decrements moves
-### handleAnimationsCompleted(info) -- transitions back to settling after animations
-### handleGridSettled(info) -- drives auto-fill or enables input/next-turn based on empties/moves
-### finishTurn(gridId) -- flips attacker/defender and begins the next turn
-### maybeRequestCpuMove() -- requests a CPU move when CPU grid is awaiting input
+### gridState(gridId) -- retrieves the coordinator-managed state bucket for a grid
+### resetAllState() -- clears controller state, coordinator data, and active grid ids
+### beginTurn(gridId, options) -- primes a turn, resets coordinator counters, and kicks off fill/launch configuration
+### handleSwapStarted(data) -- delegates to the coordinator, enforces swap quotas, and dispatches resolving signals
+### handleAnimationsCompleted(info) -- updates launch debt bookkeeping and keeps the turn in resolving state
+### handleGridSettled(info) -- advances fills, unlocks input when ready, and finalizes hand-off once settlement is clean
+### finishTurn(gridId) -- queues the next attacker hand-off, waits for settlement, and requests the next turn cycle
+### maybeRequestCpuMove() -- asks the CPU controller for a move only when the coordinator marks input ready
 
 ## Properties
 ### gridOrder -- order of grids used to rotate turns
@@ -353,7 +377,7 @@ Turn-cycle manager: enforces attacker/defender roles, move limits, settlement/fi
 ### activeGrid -- currently active attacker grid id
 ### attackerGridId -- current attacker id
 ### defenderGridId -- current defender id
-### stateByGrid -- internal map of per-grid turn state
+### turnStateCoordinator -- nested QtObject tracking per-grid counters and pending hand-offs
 
 ## signals
 ### None
@@ -573,6 +597,7 @@ Primary grid view and state machine: manages block instances, launch/fill/shuffl
 ### initialFill -- true until after first swap to gate health updates
 ### activeTurn -- whether this grid is currently the attacker
 ### turns -- remaining turns for this grid (local tracking)
+### turnPhase -- textual descriptor of the grid’s current turn state
 
 ## signals
 ### None (relies on `AppActions` and child `Block` signals)

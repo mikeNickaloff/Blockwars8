@@ -1,3 +1,18 @@
+# Change 3 - Turn Cycle Coordination Overhaul
+## Status
+- Complete
+## Context
+- Launch/cascade bookkeeping lives across ad-hoc flags in `TurnController`, allowing premature role swap before grids finish resolving.
+- Swaps are currently limited only by remaining moves, so players can queue extra swaps before animations settle.
+- `GameGrid` enables input immediately on `setActiveGrid`, letting the defender regain control before their grid is stable.
+## Proposed Changes
+- Add a turn-state coordinator inside `TurnController` that tracks move counts, pending launch/animation work, and settlement acknowledgements per grid with reset helpers for `beginTurn()`.
+- Gate swap handling through the coordinator so only three swaps can start per turn, launch counters block completion until all cascades finish, and `finishTurn()` waits for settlement.
+- Emit new QuickFlux signals for "turn resolving" and "turn ready" states so UI updates align with coordinator state, and rely on `enableBlocks` toggles instead of `setActiveGrid`.
+- Update `GameGrid` listeners to defer enabling input until explicit `enableBlocks` requests and reflect the new resolving/ready actions in grid state.
+## Questions / Comments
+- Completed per direct user request; no outstanding questions.
+
 # Change 1 - Local Powerup Persistence Completion
 ## Status
 - Complete

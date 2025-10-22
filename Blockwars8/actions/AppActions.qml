@@ -87,6 +87,55 @@ ActionCreator {
                                })
     }
 
+    function beginFillCycle(grid_id, reason) {
+        AppDispatcher.dispatch(ActionTypes.beginFillCycle, {
+                                   "grid_id": grid_id,
+                                   "reason": reason
+                               })
+    }
+
+    function setFillingEnabled(grid_id, enabled) {
+        AppDispatcher.dispatch(ActionTypes.setFillingEnabled, {
+                                   "grid_id": grid_id,
+                                   "enabled": enabled
+                               })
+    }
+
+    function setLaunchOnMatchEnabled(grid_id, enabled) {
+        AppDispatcher.dispatch(ActionTypes.setLaunchOnMatchEnabled, {
+                                   "grid_id": grid_id,
+                                   "enabled": enabled
+                               })
+    }
+
+    function swapLaunchingStarted(payload) {
+        AppDispatcher.dispatch(ActionTypes.swapLaunchingStarted, payload)
+    }
+
+    function turnCycleTurnBegan(payload) {
+        AppDispatcher.dispatch(ActionTypes.turnCycleTurnBegan, payload)
+    }
+
+    function turnCycleTurnResolving(payload) {
+        AppDispatcher.dispatch(ActionTypes.turnCycleTurnResolving, payload)
+    }
+
+    function turnCycleTurnReady(payload) {
+        AppDispatcher.dispatch(ActionTypes.turnCycleTurnReady, payload)
+    }
+
+    function requestNextTurn(payload) {
+        AppDispatcher.dispatch(ActionTypes.requestNextTurn, payload)
+    }
+
+    function cpuRequestMove(payload) {
+        AppDispatcher.dispatch(ActionTypes.cpuRequestMove, payload)
+    }
+
+    function informGridFillInNeeded(payload) {
+        AppDispatcher.dispatch(ActionTypes.informGridFillInNeeded, payload)
+    }
+
     // sent from players immediately upon making a swap, however it will not be executed on the remote client's
     //  game until their game has completed the grid events and is idle.
     //  this small requirement essentially will avoid any desync from happening as far as game timing, and will
