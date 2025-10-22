@@ -1,3 +1,18 @@
+# Change 1 - Local Powerup Persistence Completion
+## Status
+- Complete
+## Context
+- QuickFlux editor state currently queues persistence requests without writing them into the `localPowerupData` LocalStorage table.
+- The SinglePlayer zone still references the deprecated `onPowerupsLoaded` handler, triggering runtime errors during startup.
+- Documentation artifacts (PLAN, APPROVED_CHANGES, TODO, WHEEL) must acknowledge the milestone once persistence is wired end-to-end.
+## Proposed Changes
+- Extend `PowerupEditorStore` with a dedicated persistence lifecycle helper that converts canonical slot records into SQL rows, encoding assignments and payloads via `SQLDataStorage` hex utilities before flushing them with `replaceAll()`.
+- Gate persistence writes until hydration completes, ensure processed queue entries clear without losing metadata, and trigger store commits after synchronization.
+- Replace the hidden `PowerupEditor` loader in `SinglePlayer.qml` with an abstraction that watches `PowerupEditorStore.isHydrated` to reveal the scene once persistence bootstrap finishes.
+- Update APPROVED_CHANGES.md, TODO.md, and WHEEL.md to capture the completed persistence milestone and associated bug fix.
+## Questions / Comments
+- None.
+
 # Change 1 - QuickFlux Action Wiring for Editor Flow
 ## Status
 - Complete
