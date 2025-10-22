@@ -59,7 +59,7 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: hydrationCoordinator.evaluate()
+
     GameGrid {
         id: gameGrid_top
         grid_id: 0
@@ -108,6 +108,7 @@ Rectangle {
         grid_id: 1
     }
     Component.onCompleted: {
+        hydrationCoordinator.evaluate()
         gridController_top.fill()
         gridController_bottom.fill()
     }

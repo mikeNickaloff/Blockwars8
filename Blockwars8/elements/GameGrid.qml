@@ -38,6 +38,8 @@ Item {
     property var turns: 3
     property string turnPhase: "idle"
 
+
+
     ParticleSystem {
         id: particleSystem
     }
@@ -192,6 +194,9 @@ Item {
 
     function handleGridEventExecute(event) {
         var event_type = event.event_type
+        if (typeof event.startup_function == "function") {
+            startup_function(event)
+        }
         if (event_type == "shuffleDown") {
             shuffleDown(event)
         }
@@ -242,7 +247,7 @@ Item {
                 blk2.y = blk2.row * blk2.height
 
                 AppActions.gridEventDone(event)
-                AppActions.enqueueGridEvent("checkMatches", grid_id, ({}))
+                AppActions.enqueueGridEvent("checkMatches", grid_id, ({callback: function(evtdata) { console.log("**** match checking callback executed ***"); }}))
                 AppActions.enableBlocks(grid_id, false)
 
             }
@@ -620,7 +625,17 @@ Item {
         AppActions.gridEventDone(current_event)
         // }
     }
+    AppListener {
+        filter: ActionTypes.runFunctionOnGrid
+        onDispatched: function (dtype, ddata) {
+            if (ddata.grid_id === grid_id) {
+                if (typeof ddata.input_function == "function") {
+                    ddata.inputfunction(ddata.input_data)
+                }
+            }
+        }
 
+    }
     function createOneShotTimer(element, duration, action, params) {
         var comp = Qt.createComponent(
                     'qrc:///Blockwars8/components/SingleShotTimer.qml')
@@ -717,4 +732,7 @@ Item {
             id: blk
         }
     }
+
+
+
 }

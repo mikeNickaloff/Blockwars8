@@ -72,5 +72,9 @@
         <file alias="/images/block_purple.png">Blockwars8/images/block_purple.png</file>
         <file alias="/images/block_cyan.png">Blockwars8/images/block_cyan.png</file>
         <file alias="/images/block_pink.png">Blockwars8/images/block_pink.png</file>
+        <file>Blockwars8/lib/promise.js</file>
+        <file>Blockwars8/lib/Promise.qml</file>
+        <file>Blockwars8/lib/PromiseTimer.qml</file>
+        <file>Blockwars8/lib/qmldir</file>
     </qresource>
 </RCC>

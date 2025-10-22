@@ -99,6 +99,17 @@ Item {
         filter: ActionTypes.gridEventDone
         onDispatched: function (type, message) {
             console.log("grid event complete", JSON.stringify(message))
+            if (typeof message != "undefined") {
+            if (message.grid_id == grid_id) {
+                if (typeof message.callback == "function") {
+                    message.callback(message)
+                }
+                if (typeof message.callback_function == "function") {
+                    message.callback_function(message);
+                }
+
+            }
+        }
             executeNextGridEvent()
         }
     }

@@ -22,6 +22,7 @@ KeyTable {
     property string blockKilledFromFrontEnd: "blockKilledFromFrontEnd"
     property string particleBlockKilledExplodeAtGlobal: "particleBlockKilledExplodeAtGlobal"
     property string particleBlockLaunchedGlobal: "particleBlockLaunchedGlobal"
+    property string runFunctionOnGrid: "runFunctionOnGrid"
     property string fillGrid: "fillGrid"
     property string createOneBlock: "createOneBlock"
     property string swapBlocks: "swapBlocks"

@@ -40,6 +40,9 @@ ActionCreator {
     function blockLaunchCompleted(i_data) {
         AppDispatcher.dispatch(ActionTypes.blockLaunchCompleted, i_data)
     }
+    function runFunctionOnGrid(grid_id, input_function, eventData) {
+        AppDispatcher.dispatch(ActionTypes.runFunctionOnGrid, { grid_id: grid_id, input_function: input_function, input_data: eventData })
+    }
     function enqueueGridEvent(eventType, grid_id, eventParams) {
         var params = eventParams
         params.event_type = eventType
