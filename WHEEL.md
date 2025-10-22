@@ -1092,3 +1092,63 @@ Qt project and packaging metadata used to build and deploy the application and d
 ## signals
 ### None
 
+
+# Blockwars8/elements/PowerupCatalogList.qml
+## File details
+Pane-based catalog list that renders powerup slot summaries and dispatches selection requests through a provided coordinator.
+
+## Functions
+### resolver.indexFor(list, slotId) -- resolves the index for a slot id within the current entry list.
+### resolver.title(entry) -- produces a display name for the provided catalog entry.
+### resolver.subtitle(entry) -- generates a localized assignment summary for the entry.
+
+## Properties
+### provider -- external coordinator exposing `entries()` and `openSlot()` for catalog data.
+### selectionProvider -- object exposing `activeSlotId` used to highlight the focused entry.
+### entries -- evaluated array of catalog entry descriptors generated from the provider.
+### activeSlotId -- derived slot identifier matching the current focus from the selection provider.
+### highlightedIndex -- computed index aligned to the focused slot for `ListView` highlighting.
+### resolver -- helper object encapsulating formatting utilities for delegate content.
+
+## signals
+### None
+
+# Blockwars8/elements/PowerupCardView.qml
+## File details
+Pane that visualizes the currently selected powerup slot details, including metadata, assignments, and state summaries.
+
+## Functions
+### refresh() -- requests a new snapshot from the injected behavior coordinator for the active slot id.
+### presenter.valueText(value, placeholder) -- formats primitive values with placeholders for display labels.
+### presenter.assignmentsText(snapshot) -- renders assignment arrays into a comma-separated string.
+### presenter.gridSummary(snapshot) -- outputs a human-readable summary of grid selections for the slot.
+### presenter.metadataSummary(snapshot) -- serializes metadata into a multi-line string for read-only viewing.
+
+## Properties
+### behavior -- coordinator object exposing `snapshot(slotId)` and metadata helpers for card rendering.
+### slotId -- currently active slot identifier to request details for.
+### snapshot -- cached slot snapshot returned by the coordinator.
+### fallbackText -- descriptive text displayed when no slot is selected.
+### presenter -- helper object containing text-formatting utilities used by the view.
+
+## signals
+### None
+
+# Blockwars8/elements/PowerupEditorView.qml
+## File details
+High-level editor container that composes the catalog list and card view around the QuickFlux store façade for powerup slots.
+
+## Functions
+### storeFacade.openSlot(slotId, metadata) -- routes a slot focus request through the QuickFlux action façade.
+### catalogCoordinator.entries() -- projects store state into catalog entry descriptors.
+### catalogCoordinator.openSlot(slotId) -- forwards slot focus requests to the store façade.
+### cardCoordinator.snapshot(slotId) -- assembles a detailed snapshot for the requested slot id.
+### cardCoordinator.fallbackText() -- supplies the fallback messaging for empty card state.
+
+## Properties
+### storeFacade -- façade exposing store state, canonical extractors, and dispatch helpers.
+### catalogCoordinator -- helper object binding catalog state to `PowerupCatalogList`.
+### cardCoordinator -- helper object binding slot state to `PowerupCardView`.
+
+## signals
+### None

@@ -64,6 +64,9 @@
         <file>Blockwars8/controllers/GameController.qml</file>
         <file>Blockwars8/controllers/NetworkController.qml</file>
         <file>Blockwars8/elements/PowerupHud.qml</file>
+        <file>Blockwars8/elements/PowerupCatalogList.qml</file>
+        <file>Blockwars8/elements/PowerupCardView.qml</file>
+        <file>Blockwars8/elements/PowerupEditorView.qml</file>
         <file>Blockwars8/components/DragZone.qml</file>
         <file>Blockwars8/components/DropZone.qml</file>
         <file alias="/images/block_purple.png">Blockwars8/images/block_purple.png</file>
