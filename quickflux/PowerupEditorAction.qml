@@ -38,6 +38,9 @@ ActionCreator {
         property string edit: Actions.ActionTypes.powerupEditorEditSlot
         property string remove: Actions.ActionTypes.powerupEditorDeleteSlot
         property string open: Actions.ActionTypes.powerupEditorOpenCard
+        property string show: Actions.ActionTypes.powerupEditorShowDialog
+        property string hide: Actions.ActionTypes.powerupEditorHideDialog
+        property string persist: Actions.ActionTypes.powerupEditorPersistSlot
 
         function lifecycleFrom(key) {
             var tokens = key.split(".")
@@ -104,6 +107,21 @@ ActionCreator {
         }
     }
 
+    readonly property QtObject dispatchCoordinator: QtObject {
+        function slotLifecycle(actionKey, slotId, slotState, metadata) {
+            dispatchRelay.emit(
+                        actionKey,
+                        payloadComposer.compose(
+                            slotId,
+                            slotState,
+                            directiveComposer.compose(actionKey, metadata)))
+        }
+
+        function directiveOnly(actionKey, metadata) {
+            dispatchRelay.emit(actionKey, directiveComposer.compose(actionKey, metadata))
+        }
+    }
+
     readonly property QtObject dispatchRelay: QtObject {
         function emit(actionKey, payload) {
             AppDispatcher.dispatch(actionKey, payload)
@@ -111,38 +129,30 @@ ActionCreator {
     }
 
     function createSlot(slotId, slotState, metadata) {
-        dispatchRelay.emit(
-                    actionRegistry.create,
-                    payloadComposer.compose(
-                        slotId,
-                        slotState,
-                        directiveComposer.compose(actionRegistry.create, metadata)))
+        dispatchCoordinator.slotLifecycle(actionRegistry.create, slotId, slotState, metadata)
     }
 
     function editSlot(slotId, slotState, metadata) {
-        dispatchRelay.emit(
-                    actionRegistry.edit,
-                    payloadComposer.compose(
-                        slotId,
-                        slotState,
-                        directiveComposer.compose(actionRegistry.edit, metadata)))
+        dispatchCoordinator.slotLifecycle(actionRegistry.edit, slotId, slotState, metadata)
     }
 
     function deleteSlot(slotId, metadata) {
-        dispatchRelay.emit(
-                    actionRegistry.remove,
-                    payloadComposer.compose(
-                        slotId,
-                        {},
-                        directiveComposer.compose(actionRegistry.remove, metadata)))
+        dispatchCoordinator.slotLifecycle(actionRegistry.remove, slotId, {}, metadata)
     }
 
     function openCard(slotId, metadata) {
-        dispatchRelay.emit(
-                    actionRegistry.open,
-                    payloadComposer.compose(
-                        slotId,
-                        {},
-                        directiveComposer.compose(actionRegistry.open, metadata)))
+        dispatchCoordinator.slotLifecycle(actionRegistry.open, slotId, {}, metadata)
+    }
+
+    function showEditor(metadata) {
+        dispatchCoordinator.directiveOnly(actionRegistry.show, metadata)
+    }
+
+    function hideEditor(metadata) {
+        dispatchCoordinator.directiveOnly(actionRegistry.hide, metadata)
+    }
+
+    function persistSlot(slotId, slotState, metadata) {
+        dispatchCoordinator.slotLifecycle(actionRegistry.persist, slotId, slotState, metadata)
     }
 }

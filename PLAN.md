@@ -1,3 +1,17 @@
+# Change 1 - QuickFlux Action Wiring for Editor Flow
+## Status
+- Complete
+## Context
+- The QuickFlux namespace now exposes action stubs that must orchestrate dialog visibility and card selection consistently with the legacy dialog lifecycle.
+- Persisted slot payloads require dispatch pathways that preserve the JSON contract expected by downstream consumers.
+- Completing Implementation Step 4 of Change 1 unblocks the subsequent persistence integration task.
+## Proposed Changes
+- Map `PowerupEditorAction` dispatchers to store mutations that toggle editor visibility, set the active card, and emit persistence requests.
+- Introduce intermediary coordinator classes that translate high-level action inputs into concrete store commands, avoiding inline business logic inside QML signals.
+- Ensure action payloads mirror existing JSON schema keys (`slot_grids`, `slot_targets`, etc.) so legacy consumers remain functional.
+## Questions / Comments
+- None at this time; expecting alignment with previously approved payload structure.
+
 # Change 1 - PowerupEditorStore Hydration Layer
 ## Status
 - Complete

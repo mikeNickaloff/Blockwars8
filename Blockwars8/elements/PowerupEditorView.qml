@@ -6,6 +6,7 @@ import "../../quickflux" 1.0 as Editor
 Pane {
     id: editorView
 
+    visible: storeFacade.store ? storeFacade.store.isEditorVisible : true
     padding: 24
     implicitWidth: 960
     implicitHeight: 540

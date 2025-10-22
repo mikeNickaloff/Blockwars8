@@ -51,5 +51,8 @@ KeyTable {
     property string powerupEditorEditSlot: powerupEditorNamespace + ".editSlot"
     property string powerupEditorDeleteSlot: powerupEditorNamespace + ".deleteSlot"
     property string powerupEditorOpenCard: powerupEditorNamespace + ".openCard"
+    property string powerupEditorShowDialog: powerupEditorNamespace + ".showDialog"
+    property string powerupEditorHideDialog: powerupEditorNamespace + ".hideDialog"
+    property string powerupEditorPersistSlot: powerupEditorNamespace + ".persistSlot"
     }
 
