@@ -1,67 +1,18 @@
-﻿import QtQuick 2.12
-import QtQuick.Controls 2.5
+import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.3
-import QtQml.Models 2.15
-import "../models"
-import QtMultimedia 5.5
-import QtQuick.Controls 2.0
-import "../constants" 1.0
-import "../actions" 1.0
-import "../stores" 1.0
-import com.blockwars 1.0
-import QuickFlux 1.1
-import "../zones" 1.0
-import QtQuick.LocalStorage 2.15
+import "../elements" 1.0
 
-Rectangle {
-    function closeDialog() {
-        powerupEditorDialog.closeDialog()
-    }
-    PowerupEditorDialog {
-        id: powerupEditorDialog
-        onSignal_powerups_saved: {
-            MainStore.ingestPowerupData(powerup_data)
-            AppActions.enterZoneMainMenu()
-        }
-        onSignalPowerupsLoaded: {
-            powerupEditor.powerupsLoaded(0)
-        }
-    }
-    signal powerupsLoaded(var grid_id)
-    id: powerupEditor
-    width: 500
-    height: 400
-    Component.onCompleted: {
-
+Pane {
+    id: editorZone
+    anchors.fill: parent
+    background: Rectangle {
+        color: "#0d121d"
     }
 
-    function compressPowerupData(data) {
-        return {
-            "s": data.slot,
-            "t": data.target,
-            "a": data.amount,
-            "h": data.hero_targets,
-            "g": data.grid_targets.filter(function (item) {
-                return item.selected
-            }).map(function (item) {
-                return [item.row, item.col]
-            })
-        }
-    }
-
-    function decompressPowerupData(data) {
-        return {
-            "slot": data.s,
-            "target": data.t,
-            "amount": data.a,
-            "hero_targets": data.h,
-            "grid_targets": data.g.map(function (item) {
-                return {
-                    "row": item[0],
-                    "col": item[1],
-                    "selected": true
-                }
-            })
-        }
+    PowerupEditorView {
+        anchors.centerIn: parent
+        width: Math.min(parent.width * 0.9, implicitWidth)
+        height: Math.min(parent.height * 0.9, implicitHeight)
     }
 }
