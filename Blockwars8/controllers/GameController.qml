@@ -40,13 +40,17 @@ Item {
         var remainingHealth = launchBlockHealth;
         for (let i = 0; i < enemyBlocks.length; i++) {
             if (remainingHealth <= 0) break;
+            if (typeof enemyBlocks[i] != "undefined") {
             let enemyBlock = enemyBlocks[i];
             if (remainingHealth >= enemyBlock.health) {
                 remainingHealth -= enemyBlock.health;
+                var blk = enemyBlocks[i]
                 enemyBlocks[i] = null; // Block destroyed
+                blk.destroy()
             } else {
                 enemyBlock.health -= remainingHealth;
                 remainingHealth = 0;
+            }
             }
         }
         if (remainingHealth > 0) {

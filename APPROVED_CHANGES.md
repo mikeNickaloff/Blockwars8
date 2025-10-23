@@ -53,3 +53,45 @@
 - Regenerate sections per file with functions/properties/signals discovered; normalize formatting; remove duplicates.
 - Keep concise, auto-generated file summaries when no explicit documentation exists.
 - Validate coverage against the repo file list and add any missing entries.
+
+# Change 5 - GameGrid.refill() with Downward Compaction
+## Status
+- Completed
+
+## Context
+- Need a GameGrid-side refill that mirrors GridController.fill() but operates on `grid_blocks` and queues events through the controller’s queue.
+- Before spawning new blocks, empty cells should be filled by moving existing blocks downward within each column while preserving order (standard gravity toward row 5).
+- Event sequencing must respect ongoing animations; only enqueue `createBlocks` once movements have settled.
+
+## Implementation Steps
+- Add `refill()` to `Blockwars8/elements/GameGrid.qml` that:
+  - Scans `grid_blocks` column-by-column, compacts non-null blocks downward (toward row 5), updating each block’s `row` and `y` to animate.
+  - Calls `updateAnimationCounts()` and, if `animationCount > 0`, defers the spawn phase using `createOneShotTimer` to reattempt after animations settle.
+  - When settled, constructs a `creationCounts` map like `GridController.fill()` by detecting `null` cells in `grid_blocks` and generating colors using `controller.getPool(i)`, `controller.getPoolIndex(i)`, and `controller.increasePoolIndex(i)`.
+  - Pushes a `createBlocks` grid event with `create_counts` onto `controller.grid_event_queue`, then a `checkMatches` event, and triggers `controller.executeNextGridEvent()` if not waiting.
+- Do not alter existing `GridController.fill()` or `GameGrid.createBlocks()`; `refill()` only orchestrates movement + event enqueue.
+- Update `WHEEL.md` to document `GameGrid.refill()` once implemented.
+
+## Status History
+- Approved — ready for implementation.
+- Completed — refill() implemented and WHEEL.md updated.
+# Change 6 - Stepwise Refill Compaction (One Cell At A Time)
+## Status
+- Completed
+
+## Context
+- `GameGrid.refill()` should not clear columns or recreate existing blocks; it must move blocks down by one cell per iteration until fully compacted, then spawn new blocks only into empty cells.
+- Animations tied to `y` changes require waiting for previous movements to finish before attempting further compaction steps.
+
+## Implementation Steps
+- Added helpers to `Blockwars8/elements/GameGrid.qml`:
+  - `canMoveDown(row, col)` checks if a block exists at `(row,col)` and the cell below is empty.
+  - `stepCompactDown()` scans columns bottom-up and moves eligible blocks down exactly one row, updating `grid_blocks`, the block’s `row`, and `y` to animate.
+- Refactored `refill()` to:
+  - Execute `stepCompactDown()` once; if any moved or animations are active, schedule a one-shot timer to rerun `refill()` after animation duration and return.
+  - When settled, compute per-column missing counts and colors via controller pools and enqueue a single `createBlocks` event (with `missing` and `new_colors` for each column), followed by `checkMatches`, invoking `controller.executeNextGridEvent()` if idle.
+  - `createBlocks(event)` now instantiates blocks only for empty rows using the provided `new_colors`, allowing partial-column refills (e.g., three blocks).
+
+## Status History
+- Approved — ready for implementation.
+- Completed — helpers added and refill() refactored; refills emit a `createBlocks` event with per-column counts/colors to spawn only into empty rows.

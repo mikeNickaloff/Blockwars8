@@ -486,6 +486,9 @@ Reusable QML UI element or visual component.
 
 ## Functions
 ### index(...) -- auto-detected function
+### refill(...) -- new function to compact downward and enqueue spawns
+### canMoveDown(...) -- helper: checks if cell can drop one
+### stepCompactDown(...) -- helper: performs one-step downward compaction pass
 ### handleGridEventExecute(...) -- auto-detected function
 ### shuffleDownStep(...) -- auto-detected function
 ### shuffleDown(...) -- auto-detected function

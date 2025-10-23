@@ -21,23 +21,22 @@ Item {
     property var grid_block_data: new Array(36)
 
     property var waitingForCallback: false
-    Pool {
-        id: pool_0
+    property var pool_0: Pool {
     }
-    Pool {
-        id: pool_1
+    property var pool_1: Pool {
+
     }
-    Pool {
-        id: pool_2
+    property var pool_2: Pool {
+
     }
-    Pool {
-        id: pool_3
+    property var pool_3: Pool {
+
     }
-    Pool {
-        id: pool_4
+    property var pool_4: Pool {
+
     }
-    Pool {
-        id: pool_5
+    property var pool_5: Pool {
+
     }
     property var pool_0_index: Math.floor(Math.random() * 1000)
 

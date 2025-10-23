@@ -40,6 +40,7 @@ Item {
     property string turnPhase: "idle"
     property var cascadeSettledPromise
 
+    property var controller
 
     ParticleSystem {
         id: particleSystem
@@ -155,7 +156,7 @@ Item {
                 turnPhase = "idle"
                 cleanupBlocks()
                 //AppActions.enqueueGridEvent("shuffleDown", grid_id, ({}));
-                   AppActions.fillGrid(grid_id, false)
+                 refill()
             }
         }
     }
@@ -228,8 +229,11 @@ Item {
         }
         if (event_type == "setActive") {
             AppActions.setActiveGrid(grid_id);
+            shuffleTimer.start();
+            activeTurn = true;
 
             AppActions.gridEventDone(event)
+            AppActions.enqueueGridEvent("checkMatches", grid_id, ({}));
         }
         if (event_type == "cascadeSettled") {
             AppActions.cascadeSettled(grid_id)
@@ -467,43 +471,45 @@ Item {
         for (var i = 0; i < 6; i++) {
             var columnCounts = counts[String(i)].missing
             var new_colors = counts[String(i)].new_colors
+            var colorsRemaining = new_colors.length
+            if (colorsRemaining <= 0) {
+                continue
+            }
             for (var u = 0; u < 6; u++) {
-                //console.log("Creating block", u, "for column", i)
+                if (colorsRemaining <= 0) {
+                    break
+                }
+                // Only create blocks for currently empty rows in this column
+                if (!isBlockAt(u, i)) {
+                    var blkW = Math.floor(gridRoot.width / 6)
+                    var blkH = Math.floor(gridRoot.height / 6)
+                    var startY = (blkH * u) - (blkH * 6)
+                    var blkRow = u
+                    var blkCol = i
 
-                // start block off grid below row 0
-                var blkW = Math.floor(gridRoot.width / 6)
-                var blkH = Math.floor(gridRoot.height / 6)
-                var startY = (blkH * u) - (blkH * 6)
-                var blkRow = u
-                var blkCol = i
+                    var blk = blockComponent.createObject(gridRoot, {
+                                                              "x": blkW * blkCol,
+                                                              "y": startY,
+                                                              "row": blkRow,
+                                                              "column": blkCol,
+                                                              "width": blkW,
+                                                              "height": blkH,
+                                                              "block_color": new_colors.shift(),
+                                                              "grid_id": grid_id
+                                                          })
+                    blk.row = blkRow
+                    blk.column = blkCol
 
-                //console.log("creating block", blkRow, blkCol, blkH, blkW)
-                var blk = blockComponent.createObject(gridRoot, {
-                                                          "x": blkW * blkCol,
-                                                          "y": startY,
-                                                          "row": blkRow,
-                                                          "column": blkCol,
-                                                          "width": blkW,
-                                                          "height": blkH,
-                                                          "block_color": new_colors.shift(
-                                                                             ),
-                                                          "grid_id": grid_id
-                                                      })
-                blk.row = blkRow
-                blk.column = blkCol
+                    blk.animationStart.connect(handleBlockAnimationStartEvent)
+                    blk.animationDone.connect(handleBlockAnimationDoneEvent)
+                    blk.rowUpdated.connect(updateBlocks)
+                    blk.rowUpdated.connect(repositionGridBlocks)
 
-                //connect animation handlers to increase animation counts
-                blk.animationStart.connect(handleBlockAnimationStartEvent)
-                blk.animationDone.connect(handleBlockAnimationDoneEvent)
-                // update grid_blocks with new position when cascading connectors
-                blk.rowUpdated.connect(updateBlocks)
-                blk.rowUpdated.connect(repositionGridBlocks)
+                    grid_blocks[index(blkRow, blkCol)] = blk
+                    blk.y = (blkH * blkRow)
 
-                //initial assignment
-                grid_blocks[index(blkRow, blkCol)] = blk
-
-                // change y to the blocks correct row to trigger drop-in animation.
-                blk.y = (blkH * blkRow)
+                    colorsRemaining--
+                }
             }
         }
 
@@ -549,7 +555,7 @@ Item {
     // only called from handleGridEventExecute(event) which executes grid events that have been enqueued using enqueueGridEvent, with type "checkMatches"
     // does not work to call directly due to animation / block launch / drop in delays which all have multiple steps to them and are depedent on completion of previous events
     function checkMatches(event) {
-        cleanupBlocks()
+      //  cleanupBlocks()
         updateAnimationCounts()
 
         if (animationCount > 0) {
@@ -633,6 +639,9 @@ Item {
 
                             // enqueue grid event to launch one block which will happen after any other already enqueued grid events
                             // attempt to pass the cascadePromise along (which may not always exist here especially when cascading due to things other than not swapping
+                            if (typeof grid_blocks[index(u,i)] == "undefined") {
+                                continue;
+                            }
                             AppActions.enqueueGridEvent("launchBlock",
                                                         grid_id, {
                                                             "row": i,
@@ -658,6 +667,9 @@ Item {
                                 "i": u,
                                 "u": i,
                                 "grid_blocks": grid_blocks
+                            }
+                            if (typeof grid_blocks[index(u,i)] == "undefined") {
+                                continue;
                             }
                             AppActions.enqueueGridEvent("launchBlock",
                                                         grid_id, {
@@ -828,6 +840,124 @@ Item {
                                                                    onFulfilled: function() { AppActions.enqueueGridEvent("cascadeSettled", grid_id, ({})); console.log("*** enqueued cascade settled promise ***",grid_id);  }
                                                                    })
         cascadeSettledPromise = _promise;
+    }
+
+    // Helper: can a block at (row,col) drop one cell down?
+    function canMoveDown(row, col) {
+        if (row < 0 || row >= 6 || col < 0 || col >= 6) return false
+        var b = grid_blocks[index(row, col)]
+        if (b == null) return false
+        if (row + 1 >= 6) return false
+        return grid_blocks[index(row + 1, col)] == null
+    }
+
+    // Perform one compaction step: move eligible blocks down by exactly one cell
+    function stepCompactDown() {
+        var moved = false
+        for (var col = 0; col < 6; col++) {
+            for (var row = 4; row >= 0; row--) { // bottom-up, skip row 5
+                if (canMoveDown(row, col)) {
+                    var blk = grid_blocks[index(row, col)]
+                    grid_blocks[index(row, col)] = null
+                    grid_blocks[index(row + 1, col)] = blk
+                    blk.row = row + 1
+                    blk.column = col
+                    blk.y = blk.row * blk.height
+                    // ensure visual positions reflect updated rows
+                    repositionGridBlocks(blk.row)
+                    moved = true
+                }
+            }
+        }
+        return moved
+    }
+    function isBlockAt(row, col) {
+    try {
+    const v = grid_blocks[index(row, col)]
+    return v && Qt.isQtObject(v) && v.objectName === "Block"
+    } catch (e) {
+    // Covers "TypeError: Type error" for destroyed/dangling objects
+    return false
+    }
+    }
+    // Refill logic: iteratively compact one cell at a time until settled, then spawn new blocks
+    function refill() {
+
+        for (var a=0; a<6; a++) {
+          for (var b=0; b<6; b++) {
+         if (isBlockAt(a,b)) {
+                  console.log(grid_blocks[index(a,b)]);
+                  var bk = grid_blocks[index(a,b)];
+                  if (bk.health <= 0) { bk.destroy(); grid_blocks[index(a,b)] = null; }
+              }
+          }
+        }
+        // Attempt a single compaction step
+        var moved = stepCompactDown()
+
+        // If any blocks moved, allow animations to complete before the next step
+        updateAnimationCounts()
+        if (moved || animationCount > 0) {
+            // recheck quickly until all movements/animations settle
+            createOneShotTimer(gridRoot, 120, function () {
+                refill()
+            }, {})
+            return
+        }
+
+        // No more movement and animations are settled; compute per-column missing and colors for createBlocks
+        var creationCounts = ({})
+        for (var col = 0; col < 6; col++) {
+            var colMissingCount = 0
+            var pool = controller.getPool(col)
+            var pool_index = controller.getPoolIndex(col)
+            var new_colors = []
+            for (var row = 0; row < 6; row++) {
+                console.log("*** refill creation processing",row,col,typeof grid_blocks[index(row, col)])
+
+                if (!isBlockAt(row, col)) {
+                    colMissingCount++
+                    var rand_color = pool.randomNumber(pool_index)
+                    pool_index++
+                    controller.increasePoolIndex(col)
+                    var block_color
+                    switch (rand_color) {
+                    case 0:
+                        block_color = "red"
+                        break
+                    case 1:
+                        block_color = "blue"
+                        break
+                    case 2:
+                        block_color = "yellow"
+                        break
+                    case 3:
+                        block_color = "green"
+                        break
+                    default:
+                        block_color = "white"
+                    }
+                    new_colors.push(block_color)
+                }
+            }
+            creationCounts[String(col)] = {
+                "missing": colMissingCount,
+                "new_colors": new_colors
+            }
+        }
+
+        var evt = ({})
+        evt.event_type = "createBlocks"
+        evt.create_counts = creationCounts
+        controller.grid_event_queue.push(evt)
+
+        var evt2 = ({})
+        evt2.event_type = "checkMatches"
+        controller.grid_event_queue.push(evt2)
+
+        if (!controller.waitingForCallback) {
+            controller.executeNextGridEvent()
+        }
     }
 
 

@@ -72,3 +72,25 @@
 
 ## Questions / Comments
 - Should the helper also expose transaction batching now, or defer until a concrete use case emerges?
+<!-- Change 5 moved to APPROVED_CHANGES.md -->
+# Change 6 - Stepwise Refill Compaction (One Cell At A Time)
+## Status
+- Pending
+## Context
+- Current `GameGrid.refill()` compacts by reassigning final rows per column, briefly nulling column slots which risks disrupting QML block instances.
+- Requirement: do not clear column arrays; instead, move blocks down one row at a time, bottom-up, preserving order and re-run until fully compacted.
+- Animation behavior on `y` means subsequent drops should wait until prior movements settle before the next step.
+
+## Proposed Changes
+- Add helpers inside `GameGrid.qml`:
+  - `canMoveDown(row, col)` returns true when a block exists at `(row,col)` and `(row+1,col)` is empty.
+  - `stepCompactDown()` scans columns bottom-up, performs at most one-cell drops per block, updates `grid_blocks` references, `row`, and `y`; returns a boolean `moved`.
+- Refactor `refill()` to:
+  - Call `stepCompactDown()`; if `moved` or `animationCount > 0`, schedule a one-shot timer to call `refill()` again after animation duration, then `return`.
+  - When no moves remain and animations have settled, compute `creationCounts` from remaining nulls in `grid_blocks`, using `controller.getPool(col)`, `controller.getPoolIndex(col)`, and `controller.increasePoolIndex(col)`.
+  - Enqueue `createBlocks` then `checkMatches` on `controller.grid_event_queue` and trigger `controller.executeNextGridEvent()` if idle.
+- Update WHEEL.md to document new helper functions.
+
+## Questions / Comments
+- Timing: use the existing drop animation duration heuristic (`(25 * 6) + (25 * 6) + 150`) for the one-shot timer unless you prefer a different cadence.
+- Confirm no need to debounce external enqueues while iterative compaction is running (assumed safe since events are queued after settlement only).
