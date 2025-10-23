@@ -600,7 +600,7 @@ Item {
 
 
             for (var u = 0; u < 6; u++) {
-                if (grid_blocks[index(i, u)] != null) {
+                if (isBlockAt(i,u)) {
                     rowStr += color_nums[grid_blocks[index(i, u)].block_color]
 
                     curGrid.push(color_nums[grid_blocks[index(i,
@@ -608,7 +608,7 @@ Item {
                 } else {
                     curGrid.push(-1)
                 }
-                if (grid_blocks[index(u, i)] != null) {
+                if (isBlockAt(u,i)) {
                     colStr += color_nums[grid_blocks[index(u, i)].block_color]
                 }
             }
@@ -639,7 +639,7 @@ Item {
 
                             // enqueue grid event to launch one block which will happen after any other already enqueued grid events
                             // attempt to pass the cascadePromise along (which may not always exist here especially when cascading due to things other than not swapping
-                            if (typeof grid_blocks[index(u,i)] == "undefined") {
+                            if (!isBlockAt(u,i)) {
                                 continue;
                             }
                             AppActions.enqueueGridEvent("launchBlock",
@@ -668,7 +668,7 @@ Item {
                                 "u": i,
                                 "grid_blocks": grid_blocks
                             }
-                            if (typeof grid_blocks[index(u,i)] == "undefined") {
+                            if (!isBlockAt(u,i)) {
                                 continue;
                             }
                             AppActions.enqueueGridEvent("launchBlock",
@@ -740,7 +740,7 @@ Item {
         for (var i = 0; i < 6; i++) {
             var rowCount = 0
             for (var u = 0; u < 6; u++) {
-                if (grid_blocks[index(i, u)] == null) {
+                if (!isBlockAt(i, u)) {
                     continue
                 }
                 if (Math.abs(grid_blocks[index(
@@ -758,7 +758,7 @@ Item {
     function launchBlock(event) {
         if (event.grid_id == grid_id) {
             current_event = event
-            if (grid_blocks[index(event.row, event.column)] == null) {
+            if (!isBlockAt(event.row, event.column)) {
                 AppActions.gridEventDone(current_event)
                 launchCount--
                 animationCount--

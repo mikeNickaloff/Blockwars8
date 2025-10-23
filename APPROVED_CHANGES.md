@@ -95,3 +95,26 @@
 ## Status History
 - Approved — ready for implementation.
 - Completed — helpers added and refill() refactored; refills emit a `createBlocks` event with per-column counts/colors to spawn only into empty rows.
+
+# Change 7 - Cross-Platform Build & Install Docs in README
+## Status
+- Completed
+
+## Context
+- README.md lacks comprehensive, copy/paste-ready steps to build and run the app across Linux, macOS, and Windows.
+- The project uses qmake with Qt 5.15.x and requires modules: `qml`, `quick`, `quickcontrols2`, `websockets`, `widgets`, `gui`, and `network`.
+- QuickFlux is vendored in `quickflux/` and included via `quickflux.pri`; no external dependency fetch is required.
+
+## Implementation Steps
+- Add a unified Qt Creator section covering all platforms: open `Blockwars8.pro`, select a Qt 5.15.x kit, configure, build, run.
+- Add CLI sections per platform:
+  - Linux (Debian/Ubuntu, Fedora, Arch): install Qt dev packages (qtbase, declarative, quickcontrols2, websockets, tools), then `mkdir build && cd build && qmake .. && make -j$(nproc)`.
+  - macOS: install Qt 5.15.x via Homebrew or Qt Online Installer; `mkdir build && cd build && qmake .. && make -j$(sysctl -n hw.ncpu)`; run the produced `.app`.
+  - Windows (MSVC and MinGW): use the appropriate Qt command prompt; `mkdir build && cd build && qmake .. && nmake` (MSVC) or `mingw32-make` (MinGW); run the built `.exe`.
+- Highlight selecting the correct `qmake` for Qt 5.15.2+ to avoid mismatched kits.
+- Add optional packaging notes: `make install` on Unix, `windeployqt` on Windows, and `macdeployqt` on macOS.
+- Add troubleshooting notes for missing Qt modules and QML imports, and for accidentally using Qt 6 `qmake`.
+
+## Status History
+- Approved — ready to implement in README.md.
+- Completed — README.md updated with cross-platform build and install instructions.
