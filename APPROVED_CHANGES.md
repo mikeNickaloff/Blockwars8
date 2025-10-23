@@ -118,3 +118,22 @@
 ## Status History
 - Approved — ready to implement in README.md.
 - Completed — README.md updated with cross-platform build and install instructions.
+
+# Change 8 - README Build Docs Formatting
+## Status
+- Completed
+
+## Context
+- The build/install section of README.md relies on nested bullet lists, making it harder to scan.
+- The project owner requested markdown sections and fenced command blocks instead of bullets.
+
+## Implementation Steps
+- Restructure README.md build documentation to use headings per platform and task:
+  - Linux (Ubuntu/Debian, Fedora/RHEL, Arch), macOS, Windows (MSVC, MinGW).
+  - Subsections: Install dependencies, Clone repository, Build and run.
+- Add a dedicated Qt Creator section (all platforms) with steps in a fenced block.
+- Convert packaging and troubleshooting notes into sectioned paragraphs with code blocks.
+
+## Status History
+- Approved — ready to implement in README.md.
+- Completed — README.md reformatted to use headers and fenced code blocks without bullet lists in build sections.

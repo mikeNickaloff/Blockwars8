@@ -94,3 +94,4 @@
 ## Questions / Comments
 - Timing: use the existing drop animation duration heuristic (`(25 * 6) + (25 * 6) + 150`) for the one-shot timer unless you prefer a different cadence.
 - Confirm no need to debounce external enqueues while iterative compaction is running (assumed safe since events are queued after settlement only).
+<!-- Change 8 moved to APPROVED_CHANGES.md -->
