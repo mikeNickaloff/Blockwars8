@@ -59,7 +59,7 @@ KeyTable {
     property string modifyBlockHealth: "modifyBlockHealth"
 
     property string setActiveGrid: "setActiveGrid"
-
+    property string cascadeSettled: "cascadeSettled"
     // Powerup editor lifecycle namespace
     property string powerupEditorNamespace: "powerupEditor"
     property string powerupEditorCreateSlot: powerupEditorNamespace + ".createSlot"

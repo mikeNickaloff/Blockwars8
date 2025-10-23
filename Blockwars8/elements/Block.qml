@@ -33,6 +33,7 @@ Item {
         color: block_color
         border.color: "black"
         border.width: 2
+        opacity: 0
     }
     signal animationStart
     signal animationDone

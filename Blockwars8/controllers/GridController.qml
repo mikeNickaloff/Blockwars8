@@ -12,6 +12,7 @@ import QuickFlux 1.1
 import "../zones" 1.0
 import QtQuick.LocalStorage 2.15
 import com.blockwars 1.0
+import "../lib"
 
 Item {
     id: controller_root
@@ -309,4 +310,6 @@ Item {
               enableSwitching();
           }
       }
+
+
 }

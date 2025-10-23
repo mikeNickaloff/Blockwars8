@@ -41,3 +41,15 @@
 - Approved (Change 3) — Turn coordination overhaul ready for implementation.
 - WIP (Change 3) — Implementation in progress per coordinator design.
 - Completed (Change 3) — Coordinator-driven turn gating deployed with resolving/ready signaling.
+# Change 4 - Rescan and Update WHEEL.md
+## Status
+- Completed
+## Context
+- WHEEL.md must reflect the current repository structure and expose functions/properties/signals for quick navigation.
+- The file contains at least one duplicate entry and may be missing newer files.
+
+## Proposed Changes
+- Enumerate repo files (exclude build artifacts/tests/examples) and detect QML/JS/C++ signatures.
+- Regenerate sections per file with functions/properties/signals discovered; normalize formatting; remove duplicates.
+- Keep concise, auto-generated file summaries when no explicit documentation exists.
+- Validate coverage against the repo file list and add any missing entries.

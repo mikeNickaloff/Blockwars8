@@ -17,6 +17,7 @@ import "../components" 1.0
 import "../components/components.js" as JS
 import QtQuick.Particles 2.0
 import "." 1.0
+import "../lib"
 
 Item {
     id: gridRoot
@@ -37,7 +38,7 @@ Item {
     property var activeTurn: true
     property var turns: 3
     property string turnPhase: "idle"
-
+    property var cascadeSettledPromise
 
 
     ParticleSystem {
@@ -87,8 +88,8 @@ Item {
                 //board[index(row, column)] = null
                 AppActions.gridEventDone(current_event)
                 //  launchCount--
-                console.log("Launch Completed", JSON.stringify(ddata),
-                            "launch count is", launchCount)
+           //     console.log("Launch Completed", JSON.stringify(ddata),
+//                            "launch count is", launchCount)
                 if (launchCount <= 0) {
                     createOneShotTimer(gridRoot, (50 + (25 * 6) + (25 * 6)),
                                        function (params) {
@@ -102,14 +103,14 @@ Item {
 
                 }
             } else {
-                console.log("detected block launch complete from other grid", JSON.stringify(ddata))
+         //       console.log("detected block launch complete from other grid", JSON.stringify(ddata))
                 var current_healths = [];
                 var incoming_dmg = ddata.damage;
                 var current_col = 5 - ddata.column;
                 for (var u=5; u>=0; u--) {
                     if (grid_blocks[index(u, current_col)] != null) { current_healths.push(grid_blocks[index(u, current_col)].block_health); } else { current_healths.push(0); }
                 }
-                console.log("current block healths on",current_col,current_healths);
+          //      console.log("current block healths on",current_col,current_healths);
                 var destroy_list = [];
 
                 for (u=0; u<current_healths.length; u++) {
@@ -121,10 +122,10 @@ Item {
 
 
                         if (!initialFill) {
-                            console.log("modifying block health", 5 - u,current_col,grid_id, current_healths[u])
+               //             console.log("modifying block health", 5 - u,current_col,grid_id, current_healths[u])
                             AppActions.modifyBlockHealth( 5 - u, current_col, grid_id, current_healths[u])
                         } else {
-                            console.log("Not modifying health due to initialFill flag");
+      //                      console.log("Not modifying health due to initialFill flag");
                         }
                         if (incoming_dmg < 1) { incoming_dmg = 0; break; }
 
@@ -147,6 +148,14 @@ Item {
             if (!activeTurn) {
                 turns = 0;
                 turnPhase = "waitingOpponent";
+            } else {
+                turns = 3
+                activeTurn = true
+                AppActions.setFillingEnabled(grid_id, true);
+                turnPhase = "idle"
+                cleanupBlocks()
+                //AppActions.enqueueGridEvent("shuffleDown", grid_id, ({}));
+                   AppActions.fillGrid(grid_id, false)
             }
         }
     }
@@ -222,12 +231,18 @@ Item {
 
             AppActions.gridEventDone(event)
         }
+        if (event_type == "cascadeSettled") {
+            AppActions.cascadeSettled(grid_id)
+            AppActions.gridEventDone(event)
+            console.log("**** Cascade Settled ****");
+        }
         if (event_type == "swapBlocks") {
             if (initialFill) {
                 AppActions.enqueueGridEvent("disableInitialFill", 0, ({}));
                 AppActions.enqueueGridEvent("disableInitialFill", 1, ({}))
             }
             if (activeTurn) {
+                turns--;
                 var blk1 = grid_blocks[index(event.row1, event.column1)]
                 var blk2 = grid_blocks[index(event.row2, event.column2)]
                 var r1 = blk1.row
@@ -247,7 +262,7 @@ Item {
                 blk2.y = blk2.row * blk2.height
 
                 AppActions.gridEventDone(event)
-                AppActions.enqueueGridEvent("checkMatches", grid_id, ({callback: function(evtdata) { console.log("**** match checking callback executed ***"); }}))
+                AppActions.enqueueGridEvent("checkMatches", grid_id, ({cascadePromise: createCascadeSettledPromise(grid_id), callback: function(evtdata) { console.log("**** match checking callback executed ***"); }}))
                 AppActions.enableBlocks(grid_id, false)
 
             }
@@ -327,11 +342,21 @@ Item {
         //console.log()
         if (gotEmpty) {
             shuffleTimer.restart()
-            AppActions.gridEventDone(event)
-            AppActions.fillGrid(grid_id, false)
+            if (typeof event != "undefined") {
+                AppActions.fillGrid(grid_id, false, cascadeSettledPromise)
+            } else {
+                AppActions.fillGrid(grid_id, false)
+            }
+                AppActions.gridEventDone(event)
+
+
         } else {
             AppActions.gridEventDone(event)
-            AppActions.enqueueGridEvent("checkMatches", grid_id, {})
+            if (typeof event != "undefined") {
+                AppActions.enqueueGridEvent("checkMatches", grid_id, {cascadePromise: cascadeSettledPromise})
+            } else {
+                   AppActions.enqueueGridEvent("checkMatches", grid_id, {})
+            }
         }
     }
 
@@ -433,6 +458,9 @@ Item {
         blk.y = (blkH * blkRow)
         AppActions.gridEventDone(event)
     }
+
+    // called from handleGridEventExecute(event) only - must be queued as a "createBlocks" grid event using enqueueGridEvent
+    // creates blocks from event.create_counts object with this format {"<column_num>": {"missing":<num_empty cells in column>", "new_colors": ["red", "green", "yellow", "green"]}, "<column_num>":...}
     function createBlocks(event) {
         var counts = event.create_counts
         current_event = event
@@ -441,6 +469,8 @@ Item {
             var new_colors = counts[String(i)].new_colors
             for (var u = 0; u < 6; u++) {
                 //console.log("Creating block", u, "for column", i)
+
+                // start block off grid below row 0
                 var blkW = Math.floor(gridRoot.width / 6)
                 var blkH = Math.floor(gridRoot.height / 6)
                 var startY = (blkH * u) - (blkH * 6)
@@ -462,11 +492,17 @@ Item {
                 blk.row = blkRow
                 blk.column = blkCol
 
+                //connect animation handlers to increase animation counts
                 blk.animationStart.connect(handleBlockAnimationStartEvent)
                 blk.animationDone.connect(handleBlockAnimationDoneEvent)
+                // update grid_blocks with new position when cascading connectors
                 blk.rowUpdated.connect(updateBlocks)
                 blk.rowUpdated.connect(repositionGridBlocks)
+
+                //initial assignment
                 grid_blocks[index(blkRow, blkCol)] = blk
+
+                // change y to the blocks correct row to trigger drop-in animation.
                 blk.y = (blkH * blkRow)
             }
         }
@@ -508,19 +544,31 @@ Item {
             }
         } */
     }
+
+
+    // only called from handleGridEventExecute(event) which executes grid events that have been enqueued using enqueueGridEvent, with type "checkMatches"
+    // does not work to call directly due to animation / block launch / drop in delays which all have multiple steps to them and are depedent on completion of previous events
     function checkMatches(event) {
         cleanupBlocks()
         updateAnimationCounts()
+
         if (animationCount > 0) {
+
+            // if animations are happening, then we give them time to complete all the way using a OneShotTimer
+            // this will enqueue a totally new grid event so that all of the lauch sequences will complete before this one is called.
+            // which we also pass along the cascadePromise that is created when swapping blocks so that when the cascade cascadePromise resolves, it will either unlock board or switch turns
+
+
             createOneShotTimer(gridRoot, ((25 * 6) + (25 * 6) + 150),
                                function (params) {
 
                                    AppActions.enqueueGridEvent("checkMatches",
                                                                params.grid_id,
-                                                               {})
+                                                               {cascadePromise: params.cascadePromise})
                                }, {
                                    "event": event,
-                                   "grid_id": grid_id
+                                   "grid_id": grid_id,
+                                   "cascadePromise": cascadeSettledPromise,
                                })
             //console.log("Animation count is", animationCount,
             //            "skipping match checking")
@@ -537,9 +585,14 @@ Item {
             "yellow": "2",
             "green": "3"
         }
+
+        // combined row and column maatching by creating strings of numbers corrosponding to colors
+        // so like row 2 would be "020002" and then we check for any sets of repeated numbers inside of the string to identify matches
         for (var i = 0; i < 6; i++) {
             var rowStr = ""
             var colStr = ""
+
+
             for (var u = 0; u < 6; u++) {
                 if (grid_blocks[index(i, u)] != null) {
                     rowStr += color_nums[grid_blocks[index(i, u)].block_color]
@@ -554,6 +607,8 @@ Item {
                 }
             }
             //console.log(rowStr)
+
+            // not sure exactly how this algorithm works but it does work 100% of the time, so if it aint broke dont fix it
             for (var p = 0; p < 4; p++) {
 
                 for (var q = 6; q >= 3; q--) {
@@ -575,11 +630,15 @@ Item {
                                 "u": u,
                                 "grid_blocks": grid_blocks
                             }
+
+                            // enqueue grid event to launch one block which will happen after any other already enqueued grid events
+                            // attempt to pass the cascadePromise along (which may not always exist here especially when cascading due to things other than not swapping
                             AppActions.enqueueGridEvent("launchBlock",
                                                         grid_id, {
                                                             "row": i,
                                                             "column": u,
-                                                            "damage": grid_blocks[index(u, i)].health
+                                                            "damage": grid_blocks[index(u, i)].health,
+                                                            "cascadePromise": cascadeSettledPromise
                                                         })
                             curGrid[index(i, u)] = -1
 
@@ -604,7 +663,8 @@ Item {
                                                         grid_id, {
                                                             "row": u,
                                                             "column": i,
-                                                            "damage": grid_blocks[index(u, i)].health
+                                                            "damage": grid_blocks[index(u, i)].health,
+                                                            "cascadePromise": cascadeSettledPromise
                                                         })
                             curGrid[index(i, u)] = -1
                             launchCount++
@@ -620,7 +680,24 @@ Item {
         //                                    })
         //  if (animationCount == 0) {
         if (launchList.length == 0) {
-            AppActions.enableBlocks(grid_id, true)
+            if (typeof cascadeSettledPromise != "undefined") {
+                cascadeSettledPromise.resolve();
+                if (turns <= 0) {
+                    activeTurn = false;
+                    AppActions.enableBlocks(grid_id, false)
+                    AppActions.setActiveGrid(grid_id == 0 ? 1 : 0)
+                } else {
+                    AppActions.enableBlocks(grid_id, true)
+                }
+            } else {
+                if (turns <= 0) {
+                    activeTurn = false;
+                    AppActions.enableBlocks(grid_id, false)
+                    AppActions.setActiveGrid(grid_id == 0 ? 1 : 0)
+                } else {
+                    AppActions.enableBlocks(grid_id, true)
+                }
+            }
         }
         AppActions.gridEventDone(current_event)
         // }
@@ -694,7 +771,7 @@ Item {
                     launchCount--
                     if (launchCount <= 0) {
                         AppActions.enqueueGridEvent("checkMatches",
-                                                    grid_id, ({}))
+                                                    grid_id, ({cascadePromise: cascadeSettledPromise}))
                     }
                 }
                 //board[index(event.row, event.column)] = null
@@ -732,7 +809,26 @@ Item {
             id: blk
         }
     }
+    Component {
+     id: cascadeSettledPromiseComponent
 
+     Promise {
+
+
+
+
+
+
+
+     }
+    }
+
+    function createCascadeSettledPromise(grid_id) {
+        var _promise = cascadeSettledPromiseComponent.createObject({
+                                                                   onFulfilled: function() { AppActions.enqueueGridEvent("cascadeSettled", grid_id, ({})); console.log("*** enqueued cascade settled promise ***",grid_id);  }
+                                                                   })
+        cascadeSettledPromise = _promise;
+    }
 
 
 }

@@ -65,7 +65,8 @@ ActionCreator {
     function fillGrid(grid_id, end_move_after) {
         AppDispatcher.dispatch(ActionTypes.fillGrid, {
                                    "grid_id": grid_id,
-                                   "end_move_after": end_move_after
+                                   "end_move_after": end_move_after,
+
                                })
     }
     function createOneBlock(grid_id, row, column) {
@@ -263,5 +264,9 @@ ActionCreator {
     function setActiveGrid(grid_id) {
         var params = ({ "grid_id": grid_id })
         AppDispatcher.dispatch(ActionTypes.setActiveGrid, params)
+    }
+    function cascadeSettled(grid_id) {
+        var params = ({"grid_id" : grid_id })
+        AppDispatcher.dispatch(ActionTypes.cascadeSettled, params)
     }
 }
