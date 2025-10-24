@@ -90,6 +90,13 @@ ActionCreator {
                                    "blocks_enabled": blocks_enabled
                                })
     }
+    function enablePowerups(grid_id, enabled) {
+        // Stubbed action for future wiring
+        AppDispatcher.dispatch(ActionTypes.enablePowerups, {
+                                   "grid_id": grid_id,
+                                   "enabled": enabled
+                               })
+    }
 
     function beginFillCycle(grid_id, reason) {
         AppDispatcher.dispatch(ActionTypes.beginFillCycle, {
@@ -268,5 +275,9 @@ ActionCreator {
     function cascadeSettled(grid_id) {
         var params = ({"grid_id" : grid_id })
         AppDispatcher.dispatch(ActionTypes.cascadeSettled, params)
+    }
+    function endTurn(grid_id) {
+        var params = ({ "grid_id": grid_id })
+        AppDispatcher.dispatch(ActionTypes.endTurn, params)
     }
 }

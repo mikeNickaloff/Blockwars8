@@ -66,6 +66,8 @@ Rectangle {
         height: parent.height / 2.15
         width: parent.width * 0.75
         controller: gridController_top
+        turns: 0
+        activeTurn: false
     }
     GridController {
         id: gridController_top
@@ -91,11 +93,14 @@ Rectangle {
         rotation: 180
         anchors.bottom: parent.bottom
         width: parent.width * 0.75
+        activeTurn: true
         controller: gridController_bottom
+        turns: 3
     }
     GridController {
         id: gridController_bottom
         grid_id: 1
+
         Component.onCompleted: {
 
         }

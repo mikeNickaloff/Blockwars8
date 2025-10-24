@@ -39,6 +39,9 @@ Item {
     property var turns: 3
     property string turnPhase: "idle"
     property var cascadeSettledPromise
+    // Grid state machine properties
+    property string currentGridState: "init" // idle | locked | compact | fill | match | launch | init
+    property bool gridLocked: false
 
     property var controller
 
@@ -92,14 +95,15 @@ Item {
            //     console.log("Launch Completed", JSON.stringify(ddata),
 //                            "launch count is", launchCount)
                 if (launchCount <= 0) {
-                    createOneShotTimer(gridRoot, (50 + (25 * 6) + (25 * 6)),
+                  /*  createOneShotTimer(gridRoot, (50 + (25 * 6) + (25 * 6)),
                                        function (params) {
                                            AppActions.enqueueGridEvent(
                                                        "shuffleDown",
                                                        params.grid_id, ({}))
                                        }, {
                                            "grid_id": grid_id
-                                       })
+                                       }) */
+                    controlGridState()
                 } else {
 
                 }
@@ -142,6 +146,17 @@ Item {
             }
         }
     }
+    // Start next turn when opponent ends theirs
+    AppListener {
+        filter: ActionTypes.endTurn
+        onDispatched: function(dtype, ddata) {
+            if (ddata.grid_id !== grid_id) {
+                activeTurn = true
+                turns = 3
+                setGridState("compact")
+            }
+        }
+    }
     AppListener {
         filter: ActionTypes.setActiveGrid
         onDispatched: function (dtype, ddata) {
@@ -149,14 +164,19 @@ Item {
             if (!activeTurn) {
                 turns = 0;
                 turnPhase = "waitingOpponent";
+                isLocked = true
             } else {
                 turns = 3
                 activeTurn = true
                 AppActions.setFillingEnabled(grid_id, true);
                 turnPhase = "idle"
                 cleanupBlocks()
-                //AppActions.enqueueGridEvent("shuffleDown", grid_id, ({}));
-                 refill()
+
+                isLocked = false;
+                setGridState("comact")
+                checkGridStateRequirements()
+                //AppActions.enqueueGridEvent("gateRefill", grid_id, ({}));
+
             }
         }
     }
@@ -204,6 +224,11 @@ Item {
 
     function handleGridEventExecute(event) {
         var event_type = event.event_type
+        // Respect grid lock: only allow control events to proceed
+        if (gridLocked && event_type !== "controlGridStateChange") {
+            AppActions.gridEventDone(event)
+            return
+        }
         if (typeof event.startup_function == "function") {
             startup_function(event)
         }
@@ -222,6 +247,10 @@ Item {
         if (event_type == "createOneBlock") {
             createOneBlock(event)
         }
+        if (event_type == "controlGridStateChange") {
+            checkGridStateRequirements()
+            AppActions.gridEventDone(event)
+        }
         if (event_type == "disableInitialFill") {
             initialFill = false;
 
@@ -229,16 +258,22 @@ Item {
         }
         if (event_type == "setActive") {
             AppActions.setActiveGrid(grid_id);
-            shuffleTimer.start();
+            //shuffleTimer.start();
             activeTurn = true;
-
+            setGridState("compact")
+            turns = 3
             AppActions.gridEventDone(event)
-            AppActions.enqueueGridEvent("checkMatches", grid_id, ({}));
+            //AppActions.enqueueGridEvent("gateRefill", grid_id, ({}));
         }
         if (event_type == "cascadeSettled") {
             AppActions.cascadeSettled(grid_id)
             AppActions.gridEventDone(event)
             console.log("**** Cascade Settled ****");
+        }
+        if (event_type == "gateRefill") {
+
+            gateRefill();
+            AppActions.gridEventDone(event);
         }
         if (event_type == "swapBlocks") {
             if (initialFill) {
@@ -266,8 +301,9 @@ Item {
                 blk2.y = blk2.row * blk2.height
 
                 AppActions.gridEventDone(event)
-                AppActions.enqueueGridEvent("checkMatches", grid_id, ({cascadePromise: createCascadeSettledPromise(grid_id), callback: function(evtdata) { console.log("**** match checking callback executed ***"); }}))
-                AppActions.enableBlocks(grid_id, false)
+                setGridState("match");
+                //AppActions.enqueueGridEvent("checkMatches", grid_id, ({cascadePromise: createCascadeSettledPromise(grid_id), callback: function(evtdata) { console.log("**** match checking callback executed ***"); }}))
+                //AppActions.enableBlocks(grid_id, false)
 
             }
         }
@@ -332,7 +368,7 @@ Item {
         if (grid_array.indexOf(-1) > -1) {
             for (var b = 5; b >= 0; b--) {
                 for (var c = 0; c < 6; c++) {
-                    if (grid_blocks[index(b, c)] == null) {
+                    if (!isBlockAt(b, c)) {
                         AppActions.createOneBlock(grid_id, b, c)
                         gotEmpty = true
                     }
@@ -512,14 +548,14 @@ Item {
                 }
             }
         }
-
+        controlGridState()
         AppActions.gridEventDone(current_event)
     }
     function repositionGridBlocks(row) {
         for (var i = 0; i < 6; i++) {
             var rowCount = 0
             for (var u = 0; u < 6; u++) {
-                if (grid_blocks[index(i, u)] != null) {
+                if (isBlockAt(i,u)) {
                     grid_blocks[index(i,
                                       u)].y = i * grid_blocks[index(i,
                                                                     u)].height
@@ -556,7 +592,7 @@ Item {
     // does not work to call directly due to animation / block launch / drop in delays which all have multiple steps to them and are depedent on completion of previous events
     function checkMatches(event) {
       //  cleanupBlocks()
-        updateAnimationCounts()
+//        updateAnimationCounts()
 
         if (animationCount > 0) {
 
@@ -564,21 +600,23 @@ Item {
             // this will enqueue a totally new grid event so that all of the lauch sequences will complete before this one is called.
             // which we also pass along the cascadePromise that is created when swapping blocks so that when the cascade cascadePromise resolves, it will either unlock board or switch turns
 
-
-            createOneShotTimer(gridRoot, ((25 * 6) + (25 * 6) + 150),
+            controlGridState()
+            /*createOneShotTimer(gridRoot, ((25 * 6) + (25 * 6) + 150),
                                function (params) {
+                                   checkGridStateRequirements()
 
-                                   AppActions.enqueueGridEvent("checkMatches",
+                                   /*AppActions.enqueueGridEvent("checkMatches",
                                                                params.grid_id,
                                                                {cascadePromise: params.cascadePromise})
                                }, {
                                    "event": event,
                                    "grid_id": grid_id,
                                    "cascadePromise": cascadeSettledPromise,
-                               })
+                               }) */
             //console.log("Animation count is", animationCount,
             //            "skipping match checking")
-            AppActions.gridEventDone(event)
+           // AppActions.gridEventDone(event)
+
             return
         }
         launchList = []
@@ -691,8 +729,9 @@ Item {
         //                                        "grid": curGrid
         //                                    })
         //  if (animationCount == 0) {
-        if (launchList.length == 0) {
-            if (typeof cascadeSettledPromise != "undefined") {
+        //if (launchList.length == 0) {
+
+         /*   if (typeof cascadeSettledPromise != "undefined") {
                 cascadeSettledPromise.resolve();
                 if (turns <= 0) {
                     activeTurn = false;
@@ -710,8 +749,12 @@ Item {
                     AppActions.enableBlocks(grid_id, true)
                 }
             }
-        }
+        } */
         AppActions.gridEventDone(current_event)
+        controlGridState()
+//AppActions.createOneShotTimer(gridRoot, 100, function(){ checkGridStateRequirements() }, ({}))
+        // After match detection, continue state control
+       // AppActions.enqueueGridEvent("controlGridStateChange", grid_id, ({}))
         // }
     }
     AppListener {
@@ -755,6 +798,170 @@ Item {
             }
         }
     }
+    function allAnimationsSettled() {
+        updateAnimationCounts()
+        return animationCount === 0
+    }
+    function anyEmptyCells() {
+        for (var r = 0; r < 6; r++) {
+            for (var c = 0; c < 6; c++) {
+                if (!isBlockAt(r, c)) return true
+            }
+        }
+        return false
+    }
+    function compactPassOnce() {
+        // New compaction pass per spec: scan from row 5 to 1; when empty, shift above blocks up by one
+        var changed = false
+        for (var col = 0; col < 6; col++) {
+            for (var row = 5; row >= 1; row--) {
+                if (!isBlockAt(row, col)) {
+                    for (var k = row - 1; k >= 0; k--) {
+                        var blk = grid_blocks[index(k, col)]
+
+                        if (blk) {
+                            grid_blocks[index(k + 1, col)] = blk
+                            grid_blocks[index(k, col)] = null
+                            blk.row = k + 1
+                            blk.column = col
+                            blk.y = blk.row * blk.height
+                            changed = true
+                        }
+                    }
+                }
+            }
+        }
+        if (changed) repositionGridBlocks(0)
+        return changed
+    }
+    function controlGridState() {
+        console.log("controlling grid state",currentGridState);
+        switch (currentGridState) {
+        case "compact":
+            // Wait for compaction animations to settle, then proceed to fill
+            if (!allAnimationsSettled()) {
+            AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
+                return
+            }
+            setGridState("fill")
+            return
+        case "fill":
+            if (!anyEmptyCells() && allAnimationsSettled()) {
+                setGridState("match")
+                return
+            }
+            AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
+            return
+        case "match":
+            if (launchCount > 0) {
+                setGridState("launch")
+            } else {
+                setGridState("idle")
+            }
+            return
+        case "launch":
+            if (launchCount === 0 && allAnimationsSettled()) {
+                setGridState("compact")
+            } else {
+               AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
+            }
+            return
+        case "idle":
+        case "locked":
+        case "init":
+            setGridState("compact")
+        default:
+            return
+        }
+    }
+    function checkGridStateRequirements() {
+        console.log("checkingg grid state",currentGridState);
+        switch (currentGridState) {
+        case "init":
+            setGridState("compact")
+            break
+        case "compact":
+            // Disable interactions, perform a compaction pass, then control loop
+            AppActions.enableBlocks(grid_id, false)
+            AppActions.enablePowerups(grid_id, false)
+            compactPassOnce()
+            controlGridState()
+            break
+        case "fill":
+            // Compute createBlocks payload and enqueue if empties exist
+            if (anyEmptyCells()) {
+                var creationCounts = ({})
+                for (var col = 0; col < 6; col++) {
+                    var missing = 0
+                    var new_colors = []
+                    var pool = controller.getPool(col)
+                    var pool_index = controller.getPoolIndex(col)
+                    for (var row = 0; row < 6; row++) {
+                        if (!isBlockAt(row, col)) {
+                            missing++
+                            var rand_color = pool.randomNumber(pool_index)
+                            pool_index++
+                            controller.increasePoolIndex(col)
+                            var block_color = (rand_color===0?"red":rand_color===1?"blue":rand_color===2?"yellow":rand_color===3?"green":"white")
+                            new_colors.push(block_color)
+                        }
+                    }
+                    creationCounts[String(col)] = { "missing": missing, "new_colors": new_colors }
+                }
+                AppActions.enqueueGridEvent("createBlocks", grid_id, { create_counts: creationCounts })
+            }
+            controlGridState()
+            break
+        case "match":
+            updateAnimationCounts()
+            if (animationCount > 0) {
+                AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
+            } else {
+                AppActions.enqueueGridEvent("checkMatches", grid_id, ({cascadePromise: cascadeSettledPromise}))
+            //    contolGridState()
+            }
+
+
+            break;
+            // controlGridState() will be re-invoked at end of detection
+
+        case "launch":
+            controlGridState()
+            break
+        case "idle":
+            // Enable if we can act; else end turn
+            if (activeTurn && turns > 0) {
+                AppActions.enableBlocks(grid_id, true)
+                AppActions.enablePowerups(grid_id, true)
+            } else {
+                AppActions.enableBlocks(grid_id, false)
+                AppActions.enablePowerups(grid_id, false)
+                AppActions.endTurn(grid_id)
+            }
+            break
+        case "locked":
+            // no-op
+            break
+        default:
+            break
+        }
+    }
+    function setGridState(new_state) {
+
+        console.log("setting grid state",new_state);
+        if (currentGridState === new_state) return
+        currentGridState = new_state
+        if (new_state === "locked") {
+            gridLocked = true
+            return
+        } else {
+            gridLocked = false
+        }
+        // Kick off state-specific actions
+
+            checkGridStateRequirements()
+
+    }
     function launchBlock(event) {
         if (event.grid_id == grid_id) {
             current_event = event
@@ -782,8 +989,9 @@ Item {
                     //  AppActions.gridEventDone(current_event)
                     launchCount--
                     if (launchCount <= 0) {
-                        AppActions.enqueueGridEvent("checkMatches",
-                                                    grid_id, ({cascadePromise: cascadeSettledPromise}))
+                       /* AppActions.enqueueGridEvent("checkMatches",
+                                                    grid_id, ({cascadePromise: cascadeSettledPromise})) */
+                        controlGridState()
                     }
                 }
                 //board[index(event.row, event.column)] = null
@@ -900,7 +1108,7 @@ Item {
         if (moved || animationCount > 0) {
             // recheck quickly until all movements/animations settle
             createOneShotTimer(gridRoot, 120, function () {
-                refill()
+                gateRefill()
             }, {})
             return
         }
@@ -946,19 +1154,64 @@ Item {
             }
         }
 
+        var evt3 = ({})
+        evt3.event_type = "gateRefill"
+
+        var evt2 = ({})
         var evt = ({})
         evt.event_type = "createBlocks"
         evt.create_counts = creationCounts
-        controller.grid_event_queue.push(evt)
+        //controller.grid_event_queue.push(evt)
+      //   controller.grid_event_queue.push(evt3)
 
-        var evt2 = ({})
         evt2.event_type = "checkMatches"
-        controller.grid_event_queue.push(evt2)
+        //controller.grid_event_queue.push(evt2)
 
         if (!controller.waitingForCallback) {
-            controller.executeNextGridEvent()
+          //  controller.executeNextGridEvent()
         }
     }
+    function gateRefill(event, callback) {
+        var shouldRetryRefill = false;
+        cleanupBlocks();
 
+        updateAnimationCounts();
+        if (animationCount >= 1) {
+            shouldRetryRefill = true;
 
+         /*   createOneShotTimer(gridRoot, 20, function () {
+                var evt3 = ({})
+                evt3.event_type = "gateRefill"
+            //    controller.grid_event_queue.push(evt3)
+            }, {}) */
+
+            AppActions.gridEventDone(({}))
+            return;
+        }
+        var shouldRefill = false;
+
+        for (var a=0; a<6; a++) {
+//repositionGridBlocks(a)
+          for (var b=0; b<6; b++) {
+         if (!isBlockAt(a,b)) {
+        shouldRefill = true;
+         }
+
+          }
+
+        }
+
+    if (shouldRefill) {
+        AppActions.gridEventDone(({}))
+        refill();
+    } else {
+        AppActions.gridEventDone(({}))
+        var evt2 = ({})
+        evt2.event_type = "checkMatches"
+     //controller.grid_event_queue.push(evt2)
+        if (!controller.waitingForCallback) {
+       //     controller.executeNextGridEvent()
+        }
+    }
+}
 }

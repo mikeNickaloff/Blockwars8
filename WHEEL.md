@@ -502,6 +502,10 @@ Reusable QML UI element or visual component.
 ### checkMatches(...) -- auto-detected function
 ### createOneShotTimer(...) -- auto-detected function
 ### updateAnimationCounts(...) -- auto-detected function
+### compactPassOnce(...) -- auto-detected function
+### controlGridState(...) -- auto-detected function
+### checkGridStateRequirements(...) -- auto-detected function
+### setGridState(...) -- auto-detected function
 ### launchBlock(...) -- auto-detected function
 ### cleanupBlocks(...) -- auto-detected function
 ### fillBlocks(...) -- auto-detected function
@@ -521,6 +525,8 @@ Reusable QML UI element or visual component.
 ### activeTurn -- auto-detected property
 ### turns -- auto-detected property
 ### turnPhase -- auto-detected property
+### currentGridState -- auto-detected property
+### gridLocked -- auto-detected property
 
 ## signals
 ### None
@@ -1149,6 +1155,8 @@ QML action definitions and creators for app-wide dispatch.
 ### receiveNetworkEvent -- auto-detected property
 ### sendNetworkEventDone -- auto-detected property
 ### receiveNetworkEventDone -- auto-detected property
+### endTurn -- auto-detected property
+### enablePowerups -- auto-detected property
 ### sendGameStateEvent -- auto-detected property
 ### setBlockProperty -- auto-detected property
 ### activatePowerup -- auto-detected property
@@ -1200,6 +1208,7 @@ QML action definitions and creators for app-wide dispatch.
 ### createOneBlock(...) -- auto-detected function
 ### swapBlocks(...) -- auto-detected function
 ### enableBlocks(...) -- auto-detected function
+### enablePowerups(...) -- auto-detected function
 ### beginFillCycle(...) -- auto-detected function
 ### setFillingEnabled(...) -- auto-detected function
 ### setLaunchOnMatchEnabled(...) -- auto-detected function
@@ -1207,6 +1216,7 @@ QML action definitions and creators for app-wide dispatch.
 ### turnCycleTurnBegan(...) -- auto-detected function
 ### turnCycleTurnResolving(...) -- auto-detected function
 ### turnCycleTurnReady(...) -- auto-detected function
+### endTurn(...) -- auto-detected function
 ### requestNextTurn(...) -- auto-detected function
 ### cpuRequestMove(...) -- auto-detected function
 ### informGridFillInNeeded(...) -- auto-detected function

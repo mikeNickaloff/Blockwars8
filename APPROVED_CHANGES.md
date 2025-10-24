@@ -137,3 +137,35 @@
 ## Status History
 - Approved — ready to implement in README.md.
 - Completed — README.md reformatted to use headers and fenced code blocks without bullet lists in build sections.
+
+# Change 9 - Grid State Machine and Control Flow
+## Status
+- Approved
+
+## Context
+- Grid flow is event-driven but lacks an explicit state machine to coordinate compact/fill/match/launch/idle transitions per grid.
+- Need a queued grid event `controlGridStateChange` and a handler inside `GameGrid` to evaluate readiness and advance states deterministically.
+- Turn flow requires an `endTurn` action and corresponding `GameGrid` listener to begin the next grid’s turn when appropriate.
+- Introduce `currentGridState` and `gridLocked` to gate interactions and ensure consistent enable/disable of swaps and powerups.
+
+## Implementation Steps
+- Add `currentGridState` property to `GameGrid.qml` with allowed values: "idle", "locked", "compact", "fill", "match", "launch", "init".
+- Add `gridLocked` boolean that disables all event handling except minimal state control paths when true.
+- Add handler for `controlGridStateChange` in `GameGrid`’s `AppListener` (`executeGridEvent`) to call `checkGridStateRequirements()`.
+- Implement `checkGridStateRequirements()` to read `currentGridState` and decide transitions using `setGridState(new_state)`.
+- Implement `setGridState(new_state)` to:
+  - Update state, toggle `gridLocked`, and run state-linked `AppActions`.
+  - States behavior:
+    - "idle": `enableBlocks(true)` and `enablePowerups(true)` if `turns > 0` and `activeTurn`; else `enableBlocks(false)`, `enablePowerups(false)`, and dispatch `AppActions.endTurn(grid_id)`.
+    - "locked": set `gridLocked = true`; early-return any non-state events.
+    - "compact": disable swaps/powerups, run a compaction pass per column using the new pass (scan from row 5 downwards; when `(row,col)` empty, shift higher rows up one), then `controlGridState()`.
+    - "fill": compute `createBlocks` parameters (modeled after `refill()`), enqueue `createBlocks`, and periodically check for all cells filled and animations settled before switching to "match".
+    - "match": enqueue `checkMatches`; at end of detection, queue `controlGridStateChange`.
+    - "launch": poll until `launchCount == 0 && animationCount == 0` then transition back to "compact".
+- Add `ActionTypes.endTurn` and `AppActions.endTurn(grid_id)`; in `GameGrid`, add a listener for `endTurn` that starts this grid’s turn if the payload grid_id is the other grid.
+- Stub `ActionTypes.enablePowerups` and `AppActions.enablePowerups(grid_id, enabled)` for future wiring.
+- Ensure grid-event execution returns early when `gridLocked` is true (except for the control event), calling `gridEventDone` to keep the queue flowing.
+- Update WHEEL.md for new GameGrid functions/properties and new AppActions/ActionTypes entries.
+
+## Status History
+- Approved — ready to implement.

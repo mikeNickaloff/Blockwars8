@@ -45,6 +45,9 @@ KeyTable {
     property string receiveNetworkEvent: "receiveNetworkEvent"
     property string sendNetworkEventDone: "sendNetworkEventDone"
     property string receiveNetworkEventDone: "receiveNetworkEventDone"
+    // Grid state machine additions
+    property string endTurn: "endTurn"
+    property string enablePowerups: "enablePowerups"
 
     // send this when board has no matches and no empty squares
     // game states:   gameWaitingForMove
@@ -70,4 +73,3 @@ KeyTable {
     property string powerupEditorHideDialog: powerupEditorNamespace + ".hideDialog"
     property string powerupEditorPersistSlot: powerupEditorNamespace + ".persistSlot"
     }
-

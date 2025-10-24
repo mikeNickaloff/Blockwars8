@@ -74,11 +74,11 @@ Pane {
     Connections {
         target: behavior && behavior.bridge ? behavior.bridge.store : null
         ignoreUnknownSignals: true
-        onSlotArraysChanged: cardView.refresh()
-        onSlotAssignmentsChanged: cardView.refresh()
-        onSlotNamesChanged: cardView.refresh()
-        onSlotRecordsChanged: cardView.refresh()
-        onActiveSlotIdChanged: cardView.refresh()
+        onSlotArraysChanged: function() { cardView.refresh() }
+        onSlotAssignmentsChanged:function() { cardView.refresh() }
+        onSlotNamesChanged:function() { cardView.refresh() }
+        onSlotRecordsChanged:function() { cardView.refresh() }
+        onActiveSlotIdChanged:function() { cardView.refresh() }
     }
 
     background: Rectangle {
