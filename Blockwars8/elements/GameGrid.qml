@@ -90,11 +90,11 @@ Item {
                 var column = ddata.column
                 //grid_blocks[index(row, column)] = null
                 //board[index(row, column)] = null
-                AppActions.gridEventDone(current_event)
+                //AppActions.gridEventDone(current_event)
                 //  launchCount--
            //     console.log("Launch Completed", JSON.stringify(ddata),
 //                            "launch count is", launchCount)
-                if (launchCount <= 0) {
+               // if (launchCount <= 0) {
                   /*  createOneShotTimer(gridRoot, (50 + (25 * 6) + (25 * 6)),
                                        function (params) {
                                            AppActions.enqueueGridEvent(
@@ -104,9 +104,9 @@ Item {
                                            "grid_id": grid_id
                                        }) */
                     controlGridState()
-                } else {
+               // } else {
 
-                }
+               // }
             } else {
          //       console.log("detected block launch complete from other grid", JSON.stringify(ddata))
                 var current_healths = [];
@@ -174,7 +174,7 @@ Item {
 
                 isLocked = false;
                 setGridState("comact")
-                checkGridStateRequirements()
+                //checkGridStateRequirements()
                 //AppActions.enqueueGridEvent("gateRefill", grid_id, ({}));
 
             }
@@ -248,7 +248,8 @@ Item {
             createOneBlock(event)
         }
         if (event_type == "controlGridStateChange") {
-            checkGridStateRequirements()
+           // checkGridStateRequirements()
+            controlGridState()
             AppActions.gridEventDone(event)
         }
         if (event_type == "disableInitialFill") {
@@ -592,7 +593,7 @@ Item {
     // does not work to call directly due to animation / block launch / drop in delays which all have multiple steps to them and are depedent on completion of previous events
     function checkMatches(event) {
       //  cleanupBlocks()
-//        updateAnimationCounts()
+        updateAnimationCounts()
 
         if (animationCount > 0) {
 
@@ -600,7 +601,7 @@ Item {
             // this will enqueue a totally new grid event so that all of the lauch sequences will complete before this one is called.
             // which we also pass along the cascadePromise that is created when swapping blocks so that when the cascade cascadePromise resolves, it will either unlock board or switch turns
 
-            controlGridState()
+           // controlGridState()
             /*createOneShotTimer(gridRoot, ((25 * 6) + (25 * 6) + 150),
                                function (params) {
                                    checkGridStateRequirements()
@@ -619,7 +620,7 @@ Item {
 
             return
         }
-        launchList = []
+        //launchList = []
         current_event = event
         var curGrid = []
         var curDelay = 250
@@ -680,16 +681,18 @@ Item {
                             if (!isBlockAt(u,i)) {
                                 continue;
                             }
-                            AppActions.enqueueGridEvent("launchBlock",
+                            if (launchList.indexOf(grid_blocks[index(u,i)]) == -1)  {
+                            launchList.push(grid_blocks[index(i, u)])
+                            /*AppActions.enqueueGridEvent("launchBlock",
                                                         grid_id, {
                                                             "row": i,
                                                             "column": u,
                                                             "damage": grid_blocks[index(u, i)].health,
-                                                            "cascadePromise": cascadeSettledPromise
-                                                        })
+                                                        }) */
                             curGrid[index(i, u)] = -1
 
                             launchCount++
+                            }
                         }
                     }
                     if (colStr.indexOf(str) > -1) {
@@ -709,15 +712,18 @@ Item {
                             if (!isBlockAt(u,i)) {
                                 continue;
                             }
-                            AppActions.enqueueGridEvent("launchBlock",
+                            if (launchList.indexOf(grid_blocks[index(u,i)]) == -1)  {
+                            launchList.push(grid_blocks[index(u, i)])
+                            /* AppActions.enqueueGridEvent("launchBlock",
                                                         grid_id, {
                                                             "row": u,
                                                             "column": i,
                                                             "damage": grid_blocks[index(u, i)].health,
                                                             "cascadePromise": cascadeSettledPromise
-                                                        })
-                            curGrid[index(i, u)] = -1
+                                                        }) */
+                            curGrid[index(u, i)] = -1
                             launchCount++
+                            }
                         }
                     }
                 }
@@ -751,8 +757,8 @@ Item {
             }
         } */
         AppActions.gridEventDone(current_event)
-        controlGridState()
-//AppActions.createOneShotTimer(gridRoot, 100, function(){ checkGridStateRequirements() }, ({}))
+
+AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
         // After match detection, continue state control
        // AppActions.enqueueGridEvent("controlGridStateChange", grid_id, ({}))
         // }
@@ -811,31 +817,31 @@ Item {
         return false
     }
     function compactPassOnce() {
-        // New compaction pass per spec: scan from row 5 to 1; when empty, shift above blocks up by one
+        // Stable bottom-up compaction: preserve intra-column order deterministically
         var changed = false
         for (var col = 0; col < 6; col++) {
-            for (var row = 5; row >= 1; row--) {
-                if (!isBlockAt(row, col)) {
-                    for (var k = row - 1; k >= 0; k--) {
-                        var blk = grid_blocks[index(k, col)]
-
-                        if (blk) {
-                            grid_blocks[index(k + 1, col)] = blk
-                            grid_blocks[index(k, col)] = null
-                            blk.row = k + 1
-                            blk.column = col
-                            blk.y = blk.row * blk.height
-                            changed = true
-                        }
-                    }
-                }
+            var list = []
+            for (var row = 0; row < 6; row++) {
+                var b = grid_blocks[index(row, col)]
+                if (isBlockAt(row, col)) list.push(b)
+                grid_blocks[index(row, col)] = null
+            }
+            var startRow = 6 - list.length
+            for (var i = 0; i < list.length; i++) {
+                var targetRow = startRow + i
+                var blk = list[i]
+                grid_blocks[index(targetRow, col)] = blk
+                if (blk.row !== targetRow || blk.column !== col) changed = true
+                blk.row = targetRow
+                blk.column = col
+                blk.y = blk.row * blk.height
             }
         }
         if (changed) repositionGridBlocks(0)
         return changed
     }
     function controlGridState() {
-        console.log("controlling grid state",currentGridState);
+
         switch (currentGridState) {
         case "compact":
             // Wait for compaction animations to settle, then proceed to fill
@@ -843,39 +849,54 @@ Item {
             AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
                 return
             }
+            console.log("controlling grid state",currentGridState);
             setGridState("fill")
             return
         case "fill":
             if (!anyEmptyCells() && allAnimationsSettled()) {
+                console.log("controlling grid state",currentGridState);
                 setGridState("match")
                 return
             }
             AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
             return
         case "match":
-            if (launchCount > 0) {
+            if (launchList.length > 0) {
+                console.log("controlling grid state",currentGridState);
                 setGridState("launch")
             } else {
+                console.log("controlling grid state",currentGridState);
                 setGridState("idle")
             }
             return
         case "launch":
-            if (launchCount === 0 && allAnimationsSettled()) {
+             if (!allAnimationsSettled()) {
+                 AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
+                     return
+                 }
+             if (launchCount <= 0) {
+            if (launchList.length == 0) {
+                console.log("controlling grid state",currentGridState);
                 setGridState("compact")
             } else {
                AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
             }
+             } else {
+              AppActions.createOneShotTimer(gridRoot, 100, function(){ controlGridState() }, ({}))
+             }
+
             return
         case "idle":
         case "locked":
         case "init":
+            console.log("controlling grid state",currentGridState);
             setGridState("compact")
         default:
             return
         }
     }
     function checkGridStateRequirements() {
-        console.log("checkingg grid state",currentGridState);
+     //   console.log("checkingg grid state",currentGridState);
         switch (currentGridState) {
         case "init":
             setGridState("compact")
@@ -926,7 +947,40 @@ Item {
             // controlGridState() will be re-invoked at end of detection
 
         case "launch":
-            controlGridState()
+
+            launchCount = 0;
+            var curDelay = 75;
+            for (var i=0; i<launchList.length; i++) {
+                var blk = launchList[i];
+                if (typeof blk !== "undefined") {
+                    try {
+                        var blkName = blk.objectName
+                        launchCount++;
+                        AppActions.enqueueGridEvent("launchBlock",
+                                                                                grid_id, {
+                                                                                    "row": blk.row,
+                                                                                    "column": blk.column,
+                                                                                    "damage": blk.health,
+
+                                                                                })
+
+                         /*AppActions.createOneShotTimer(gridRoot, curDelay, function(){                         launchCount++;
+                             launchBlock(({ grid_id: grid_id, row: blk.row, column: blk.column, health: blk.health, event_type: "launchBlock"})) }, ({})) */
+                        curDelay += 25;
+
+
+
+                    } catch(err) {
+
+                }
+                } else {
+
+                }
+            }
+
+            launchList = [];
+            console.log(launchList, launchCount)
+            ///controlGridState()
             break
         case "idle":
             // Enable if we can act; else end turn
@@ -969,31 +1023,28 @@ Item {
                 AppActions.gridEventDone(current_event)
                 launchCount--
                 animationCount--
-                if (launchCount == 0) {
-
-                    AppActions.enqueueGridEvent("shuffleDown", grid_id, ({}))
+                if (launchCount <= 0) {
+                    checkGridStateRequirements()
+                   // AppActions.enqueueGridEvent("shuffleDown", grid_id, ({}))
                 }
                 return
             } else {
-                if (launchList.indexOf(index(event.row, event.column)) == -1) {
+                AppActions.gridEventDone(current_event)
+                launchCount--
+                animationCount--
+                    //  AppActions.gridEventDone(current_event)
                     var blk = grid_blocks[index(event.row, event.column)]
                     if (blk) {
                         blk.launch()
-                        var moveBlocks = 0
-                        launchCount++
-                        launchList.push(index(event.row, event.column))
 
-                        grid_blocks[index(event.row, event.column)] = null
                     }
-                } else {
-                    //  AppActions.gridEventDone(current_event)
-                    launchCount--
                     if (launchCount <= 0) {
                        /* AppActions.enqueueGridEvent("checkMatches",
                                                     grid_id, ({cascadePromise: cascadeSettledPromise})) */
-                        controlGridState()
+                        checkGridStateRequirements()
+
                     }
-                }
+
                 //board[index(event.row, event.column)] = null
                 // AppActions.gridEventDone(current_event)
             }

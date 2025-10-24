@@ -66,6 +66,29 @@ Item {
             }
         }
     }
+    Behavior on x {
+        SequentialAnimation {
+            ScriptAction {
+                script: {
+                    block.animationStart()
+                    AppActions.enableBlocks(grid_id, false)
+                }
+            }
+            NumberAnimation {
+                duration: 100 + ((6 - row) * 75)
+                //duration: 100
+            }
+//            NumberAnimation {
+//                duration: 100 + ((6 - row) * 105)
+//                 duration: 50 * (6 - row) + 150
+//            }
+            ScriptAction {
+                script: {
+                    block.animationDone()
+                }
+            }
+        }
+    }
 
     /* functions */
     function launch() {
