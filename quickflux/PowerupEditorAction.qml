@@ -71,6 +71,7 @@ ActionCreator {
             "slot_types",
             "slot_amounts",
             "slot_colors",
+            "slot_life",
             "slot_energy"
         ]
 

@@ -136,6 +136,12 @@ Pane {
                     color: "#d0d6e8"
                 }
 
+                Label { text: qsTr("Life") }
+                Label {
+                    text: presenter.valueText(snapshot ? snapshot.life : null, qsTr("0"))
+                    color: "#d0d6e8"
+                }
+
                 Label { text: qsTr("Energy") }
                 Label {
                     text: presenter.valueText(snapshot ? snapshot.energy : null, qsTr("0"))

@@ -1,5 +1,17 @@
 # ADDITIONAL AGENT INSTRUCTIONS
 
+# WHEEL.db
+- First check for WHEEL.md and WHEEL.db files
+- If WHEEL.db doesnt exist, then check if there is sqlite3 in PATH by runnning ```sqlite3 --help```
+- If sqlite3 exists, then proceeed to create a new sqlite3 database called WHEEL.db with the following tables:
+-> files (id, relpath, description) // project files
+-> defs (id, file_id, type, parameters, description) // type is member, function, or signal
+-> refs (id, def_id, reference_def_id) // will have all references for every definition stored here for rapid lookup
+- Once the WHEEL.db file is created, parse WHEEL.md (if it exists) and populate the database by using sqlite3 command line tool to populate the database (make sure to safely sanitize input)
+
+- WHEEL.db becomes the replacement for WHEEL.md and information about which functions are in what file should be pulled using ``sqlite3 -markdown select defs``` and use inner join or something to get the file id for the file in question. Do this instead of reading the entire file when possible.
+- Do not update the refs table, that is for planned future release.
+
 ## PLAN.md
 - Maintain a PLAN.md file at the repository root as the authoritative record of work plans before any coding begins.
 - Every planned change must be documented in PLAN.md and explicitly approved or revised before implementation work starts.

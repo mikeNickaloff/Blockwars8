@@ -22,11 +22,12 @@ Pane {
                 "slot_types",
                 "slot_colors",
                 "slot_amounts",
+                "slot_life",
                 "slot_energy",
                 "slot_grids"
             ]
             readonly property var textual: ["slot_targets", "slot_types", "slot_colors"]
-            readonly property var numeric: ["slot_amounts", "slot_energy"]
+            readonly property var numeric: ["slot_amounts", "slot_life", "slot_energy"]
         }
 
         readonly property QtObject extractor: QtObject {
@@ -242,6 +243,7 @@ Pane {
                 type: bridge.extractor.textFor("slot_types", resolved),
                 color: bridge.extractor.textFor("slot_colors", resolved),
                 amount: bridge.extractor.numericFor("slot_amounts", resolved),
+                life: bridge.extractor.numericFor("slot_life", resolved),
                 energy: bridge.extractor.numericFor("slot_energy", resolved),
                 assignments: assignments,
                 gridSelectionCount: gridCount,
@@ -285,11 +287,27 @@ Pane {
                 selectionProvider: storeFacade
             }
 
-            PowerupCardView {
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                behavior: cardCoordinator
-                slotId: storeFacade.activeSlotId
+                spacing: 18
+
+                PowerupCardView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: false
+                    Layout.preferredHeight: 260
+                    Layout.maximumHeight: 320
+                    behavior: cardCoordinator
+                    slotId: storeFacade.activeSlotId
+                }
+
+                PowerupEditorForm {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    bridge: storeFacade
+                    actions: storeFacade.actions
+                    slotId: storeFacade.activeSlotId
+                }
             }
         }
     }

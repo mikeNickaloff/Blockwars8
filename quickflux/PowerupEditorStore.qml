@@ -160,6 +160,7 @@ Store {
             "slot_types",
             "slot_amounts",
             "slot_colors",
+            "slot_life",
             "slot_energy"
         ]
         property int gridColumns: 6
@@ -174,6 +175,8 @@ Store {
                 return ""
             case "slot_amounts":
             case "slot_energy":
+                return 0
+            case "slot_life":
                 return 0
             default:
                 return null
@@ -358,6 +361,23 @@ Store {
                 }
                 return undefined
             }
+            if (key === "slot_life") {
+                if (payload.life !== undefined) {
+                    return payload.life
+                }
+                if (payload.card_life !== undefined) {
+                    return payload.card_life
+                }
+                if (payload.data) {
+                    if (payload.data.life !== undefined) {
+                        return payload.data.life
+                    }
+                    if (payload.data.card_life !== undefined) {
+                        return payload.data.card_life
+                    }
+                }
+                return undefined
+            }
             return undefined
         }
 
@@ -370,6 +390,7 @@ Store {
                 return gridValue(value)
             case "slot_amounts":
             case "slot_energy":
+            case "slot_life":
                 return numberValue(value, defaultFor(key))
             case "slot_targets":
             case "slot_types":
@@ -403,6 +424,155 @@ Store {
         }
     }
 
+    readonly property QtObject energyCoordinator: QtObject {
+        function clampLife(value) {
+            if (value === undefined || value === null) {
+                return 0
+            }
+            var numeric = typeof value === "number" ? value : parseInt(value, 10)
+            if (isNaN(numeric)) {
+                numeric = 0
+            }
+            numeric = Math.round(numeric)
+            if (numeric < 0) {
+                numeric = 0
+            }
+            if (numeric > 2000) {
+                numeric = 2000
+            }
+            return numeric
+        }
+
+        function hasLife(payload) {
+            if (!payload) {
+                return false
+            }
+            if (payload.slot_life !== undefined) {
+                return true
+            }
+            if (payload.life !== undefined) {
+                return true
+            }
+            if (payload.card_life !== undefined) {
+                return true
+            }
+            if (payload.data) {
+                if (payload.data.life !== undefined || payload.data.card_life !== undefined) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        function hasEnergy(payload) {
+            if (!payload) {
+                return false
+            }
+            if (payload.slot_energy !== undefined) {
+                return true
+            }
+            if (payload.energy !== undefined) {
+                return true
+            }
+            if (payload.data) {
+                if (payload.data.energy !== undefined) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        function contextFromPayload(payload, canonicalState) {
+            var state = canonicalState || {}
+            return {
+                lifeProvided: hasLife(payload),
+                energyProvided: hasEnergy(payload),
+                energyValue: state.slot_energy !== undefined ? state.slot_energy : 0
+            }
+        }
+
+        function gridSelectionCount(grid) {
+            if (!grid || typeof grid !== "object") {
+                return 0
+            }
+            var count = 0
+            for (var key in grid) {
+                if (!grid.hasOwnProperty(key)) {
+                    continue
+                }
+                if (grid[key]) {
+                    count += 1
+                }
+            }
+            return count
+        }
+
+        function baseFor(type, damage, gridCount) {
+            var totalDamage = Math.max(0, Math.abs(damage))
+            var coverage = Math.max(0, gridCount)
+            switch (type) {
+            case "blocks":
+                return totalDamage * Math.max(1, coverage)
+            case "health":
+                return totalDamage * 2.5
+            case "heros":
+            case "heroes":
+                return totalDamage * 1.5
+            default:
+                return totalDamage
+            }
+        }
+
+        function balancedEnergy(type, amount, life, grid) {
+            var coverage = gridSelectionCount(grid)
+            var base = baseFor(type, amount, coverage)
+            var lifeBonus = Math.max(0, life) * 0.4
+            var energy = Math.round(base + lifeBonus)
+            if (energy === 0 && Math.abs(amount) > 0) {
+                energy = 1
+            }
+            return energy
+        }
+
+        function deriveLife(type, amount, grid, desiredEnergy) {
+            var coverage = gridSelectionCount(grid)
+            var base = baseFor(type, amount, coverage)
+            var delta = Math.max(0, desiredEnergy - Math.round(base))
+            if (delta <= 0) {
+                return 0
+            }
+            return clampLife(delta / 0.4)
+        }
+
+        function apply(record, context) {
+            if (!record || !record.state) {
+                return record
+            }
+            var details = context || {}
+            var state = record.state
+            state.slot_life = clampLife(state.slot_life)
+            var lifeProvided = details.lifeProvided !== undefined ? details.lifeProvided : true
+            var energyProvided = details.energyProvided !== undefined ? details.energyProvided : false
+            if (!lifeProvided && energyProvided) {
+                var derived = deriveLife(
+                            state.slot_types,
+                            state.slot_amounts,
+                            state.slot_grids,
+                            details.energyValue !== undefined ? details.energyValue : 0)
+                if (derived > 0) {
+                    state.slot_life = clampLife(derived)
+                }
+            }
+            var computed = balancedEnergy(
+                        state.slot_types,
+                        state.slot_amounts,
+                        state.slot_life,
+                        state.slot_grids)
+            state.slot_energy = computed
+            return record
+        }
+    }
+
     readonly property QtObject blueprint: QtObject {
         function canonicalState(payload, slotId) {
             var state = {}
@@ -422,15 +592,17 @@ Store {
             return snapshot
         }
 
-        function compose(slotId, name, assignments, state, data) {
+        function compose(slotId, name, assignments, state, data, context) {
             var resolvedId = schema.canonicalSlotId(slotId)
-            return {
+            var canonical = canonicalStateFrom(state)
+            var record = {
                 id: resolvedId,
                 name: schema.canonicalName(resolvedId, name),
                 assignments: schema.assignmentsFrom(assignments),
-                state: canonicalStateFrom(state),
+                state: canonical,
                 data: cloning.deep(data || {})
             }
+            return energyCoordinator.apply(record, context)
         }
 
         function payload(record) {
@@ -622,7 +794,8 @@ Store {
             var resolvedName = payload && payload.name !== undefined ? payload.name : meta.name
             var assignments = payload && payload.slot_assignments !== undefined ? payload.slot_assignments : meta.assignments
             var rawData = payload && payload.data !== undefined ? payload.data : payload
-            return blueprint.compose(slotId, resolvedName, assignments, state, rawData)
+            var context = energyCoordinator.contextFromPayload(payload, state)
+            return blueprint.compose(slotId, resolvedName, assignments, state, rawData, context)
         }
 
         function fromAction(payload) {
@@ -681,7 +854,7 @@ Store {
                 var record = translator.fromAction(payload)
                 var fallbackId = translator.slotIdFrom(payload)
                 if (!record && fallbackId !== null) {
-                    record = blueprint.compose(fallbackId, payload ? payload.name : undefined, payload ? payload.slot_assignments : undefined, payload, payload ? payload.data : undefined)
+                    record = translator.recordFromPayload(payload, fallbackId, { name: payload ? payload.name : undefined, assignments: payload ? payload.slot_assignments : undefined })
                 }
                 if (!record) {
                     return null
@@ -786,7 +959,15 @@ Store {
             if (!record) {
                 return null
             }
-            return blueprint.compose(record.id, record.name, record.assignments, record.state, record.data)
+            var energyValue = record && record.state && record.state.slot_energy !== undefined
+                    ? record.state.slot_energy
+                    : 0
+            var context = {
+                lifeProvided: true,
+                energyProvided: true,
+                energyValue: energyValue
+            }
+            return blueprint.compose(record.id, record.name, record.assignments, record.state, record.data, context)
         }
 
         function adopt(records) {

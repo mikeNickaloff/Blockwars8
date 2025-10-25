@@ -28,11 +28,13 @@ public:
     QHash<int,  int> slot_amounts;
     QHash<int, QString> slot_colors;
     QHash<int, int> slot_energy;
+    QHash<int, int> slot_life;
     QHash<int, QComboBox*> slot_targets_combos;
     QHash<int, QComboBox*> slot_types_combos;
     QHash<int, QComboBox*> slot_colors_combos;
     QHash<int, QSpinBox*> slot_amounts_spins;
     QHash<int, QSpinBox*> slot_energy_spins;
+    QHash<int, QSpinBox*> slot_life_spins;
     QHash<int, QWidget*> slot_grids_widgets;
     QDialog *dialog;
     template <typename T>

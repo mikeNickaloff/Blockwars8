@@ -2,3 +2,5 @@ BlockLaunchParticle 1.0 BlockLaunchParticle.qml
 PowerupCatalogList 1.0 PowerupCatalogList.qml
 PowerupCardView 1.0 PowerupCardView.qml
 PowerupEditorView 1.0 PowerupEditorView.qml
+PowerupEditorForm 1.0 PowerupEditorForm.qml
+PowerupGridSelector 1.0 PowerupGridSelector.qml

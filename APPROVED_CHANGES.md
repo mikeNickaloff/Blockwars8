@@ -169,3 +169,22 @@
 
 ## Status History
 - Approved — ready to implement.
+# Change 10 - Powerup Editor Feature Parity
+## Status
+- Completed
+
+## Context
+- README promises customizable powerup damage, targets, colors, and automatic energy scaling tied to card life.
+- The QML editor previously exposed read-only summaries without any editing controls.
+- Legacy energy calculations ignored card life, diverging from the documented gameplay loop.
+
+## Implementation Steps
+- [x] Extend `PowerupEditorStore` with `slot_life`, a balanced energy calculator, and compatibility handling for existing data.
+- [x] Replace the static catalog view with `PowerupEditorForm`, enabling live edits to targets, damage, color, life, and persistence.
+- [x] Ship a reusable `PowerupGridSelector` component and mirror the lifecycle/energy updates inside the legacy `PowerupEditorDialog` widgets.
+- [x] Surface the new life stat inside `PowerupCardView` and refresh WHEEL documentation plus the SQLite mirror.
+
+## Status History
+- Approved — Awaiting implementation kickoff.
+- WIP — Store schema, editor form, grid selector, and dialog updates in progress.
+- Completed — Powerup editor UX now matches README feature promises with updated documentation.

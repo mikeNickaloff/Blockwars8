@@ -595,6 +595,64 @@ Reusable QML UI element or visual component.
 ### None
 
 
+# Blockwars8/elements/PowerupEditorForm.qml
+## File details
+Editor-side form that exposes target/type/color, damage, life, grid selection, and persistence hooks for a selected powerup slot.
+
+## Functions
+### mergeState(...) -- merges local form state with new keys before dispatching
+### selectionClone(...) -- clones selection maps for safe mutation
+### scheduleCommit(...) -- debounced helper that dispatches edits after field changes
+### updateLocal(...) -- updates the cached form state with specific values
+### refreshFromStore(...) -- hydrates controls from the active slot in the store
+### optionIndex(...) -- resolves a ComboBox index for a stored value
+### commit(...) -- dispatches editSlot with the current form payload
+### persist(...) -- issues a persistSlot request after committing
+### resetToStore(...) -- restores the form to the persisted store values
+
+## Properties
+### bridge -- reference to the store facade used for lookups
+### actions -- QuickFlux action creator used for dispatch
+### slotId -- active slot identifier being edited
+### isEditable -- computed flag indicating whether controls are enabled
+### localState -- cached payload snapshot for staged edits
+### computedEnergy -- latest activation energy exposed to the UI
+### gridSelection -- map of selected grid cells for the slot
+
+## signals
+### None
+
+
+# Blockwars8/elements/PowerupGridSelector.qml
+## File details
+Reusable 6x6 grid control that tracks boolean selections with debounced notifications for editor workflows.
+
+## Functions
+### clone(...) -- normalizes an input selection map to canonical truthy keys
+### isSelected(...) -- checks whether a given index is currently active
+### setSelected(...) -- assigns a state for a specific index and emits selection updates
+### toggle(...) -- flips selection for the supplied index respecting editability
+### availableWidth(...) -- computes interior width for cell sizing constraints
+
+## Properties
+### selection -- externally supplied selection map binding
+### _internalSelection -- internal working copy used for rendering
+### editable -- enables or disables user interaction
+### rows -- row count (defaults to 6)
+### columns -- column count (defaults to 6)
+### cellMinSize -- minimum cell dimension in pixels
+### cellMaxSize -- maximum cell dimension in pixels
+### cellSpacing -- gap between cells
+### activeColor -- fill color for selected cells
+### inactiveColor -- fill color for unselected cells
+### borderActiveColor -- border color when selected
+### borderInactiveColor -- border color when unselected
+
+## signals
+### selectionEdited -- emitted with the updated selection map after user edits
+### cellActivated -- emitted per toggle with cell index and new state
+
+
 # Blockwars8/elements/BlockLaunchParticle.qml
 ## File details
 Reusable QML UI element or visual component.

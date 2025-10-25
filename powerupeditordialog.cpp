@@ -2,7 +2,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QTimer>
-#include "math.h"
+#include <algorithm>
+#include <cmath>
 #include <QObject>
 #include <QDialog>
 #include <QLineEdit>
@@ -11,6 +12,7 @@
 #include <QFormLayout>
 #include <QComboBox>
 #include <QSpinBox>
+#include <QAbstractSpinBox>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
@@ -19,7 +21,42 @@
 #include "ClickableLabel.h"
 #include <QtDebug>
 #include <QString>
+#include <QSpinBox>
+
 #include <QJsonValue>
+
+namespace {
+int gridSelectionCount(const QJsonObject &grid) {
+    int count = 0;
+    for (auto it = grid.begin(); it != grid.end(); ++it) {
+        if (it.value().toBool()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int computeBalancedEnergy(const QString &type, int amount, int life, const QJsonObject &grid) {
+    const int damage = std::abs(amount);
+    const int coverage = std::max(0, gridSelectionCount(grid));
+    double base = 0.0;
+    if (type == QStringLiteral("blocks")) {
+        base = static_cast<double>(damage) * std::max(1, coverage);
+    } else if (type == QStringLiteral("health")) {
+        base = static_cast<double>(damage) * 2.5;
+    } else if (type == QStringLiteral("heros") || type == QStringLiteral("heroes")) {
+        base = static_cast<double>(damage) * 1.5;
+    } else {
+        base = static_cast<double>(damage);
+    }
+    const double lifeBonus = std::max(0, life) * 0.4;
+    int energy = static_cast<int>(std::round(base + lifeBonus));
+    if (energy == 0 && damage > 0) {
+        energy = 1;
+    }
+    return energy;
+}
+}
 
 PowerupEditorDialog::PowerupEditorDialog(QObject* parent) : QObject(parent)
 {
@@ -120,9 +157,20 @@ auto populateForm = [&, this](QFormLayout *form, int slot_num) {
     form->addRow("Amount:", amountBox);
     this->slot_amounts_spins[slot_num] = amountBox;
     amountBox->setValue(this->slot_amounts.value(slot_num));
+    slot_amounts[slot_num] = amountBox->value();
+
+    QSpinBox *lifeBox = new QSpinBox();
+    lifeBox->setRange(0, 2000);
+    lifeBox->setSingleStep(10);
+    form->addRow("Life:", lifeBox);
+    this->slot_life_spins[slot_num] = lifeBox;
+    lifeBox->setValue(this->slot_life.value(slot_num, 0));
+    slot_life[slot_num] = lifeBox->value();
 
     QSpinBox *energyBox = new QSpinBox();
-    energyBox->setRange(-2000, 2000);
+    energyBox->setRange(0, 4000);
+    energyBox->setReadOnly(true);
+    energyBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
     form->addRow("Energy:", energyBox);
     this->slot_energy_spins[slot_num] = energyBox;
     //updateEnergy(slot_num);
@@ -139,7 +187,18 @@ auto populateForm = [&, this](QFormLayout *form, int slot_num) {
         } else {
             gridWidget->hide();
         }
+        slot_types[slot_num] = text;
+        this->updateEnergy(slot_num);
+    });
 
+    QObject::connect(amountBox, QOverload<int>::of(&QSpinBox::valueChanged), [=](const int value) {
+        slot_amounts[slot_num] = value;
+        this->updateEnergy(slot_num);
+    });
+
+    QObject::connect(lifeBox, QOverload<int>::of(&QSpinBox::valueChanged), [=](const int value) {
+        slot_life[slot_num] = value;
+        this->updateEnergy(slot_num);
     });
 
 };
@@ -199,60 +258,34 @@ qDebug() << this->slot_types_combos.values();
 
 void PowerupEditorDialog::updateEnergy(int slot_num)
 {
-
-    QString slotType = this->slot_types_combos.value(slot_num)->currentText();
-  //  qDebug() << "Updating energy for slot" << slot_num << slotType;
-    if (slotType == "none") {
-
-
-        slot_energy[slot_num] = 0;
-    }
-    slot_amounts[slot_num] = slot_amounts_spins.value(slot_num)->value();
-    int amt = abs(this->slot_amounts.value(slot_num, 0));
-
-//qDebug() << "amont is" << amt << "for energy calculation";
-
-    // attacking only blocks therefore does not have possibility of killing player realistically
-    //  because in order to make enough blocks to KO a player's 2000 health, you would need to first deal 2000 damage
-    //  to blocks on the grid which will take long enough for the other player to fight back
-    if (slotType == "blocks") {
-
-        int gridSize = 0;
-        for (int i=0; i<this->slot_grids.value(slot_num, QJsonObject()).keys().count(); i++) {
-            QString key = this->slot_grids.value(slot_num).keys().at(i);
-            if (this->slot_grids.value(slot_num, QJsonObject()).value(key).toBool() == true) {
-                gridSize++;
-             //   qDebug() << "grid size is now" << gridSize << "for energy calculation";
-            }
+    if (slot_num < 0) {
+        for (auto it = slot_types_combos.begin(); it != slot_types_combos.end(); ++it) {
+            updateEnergy(it.key());
         }
-        this->slot_energy[slot_num] = amt * gridSize;
-
-
+        return;
+    }
+    if (!slot_types_combos.contains(slot_num) || !slot_amounts_spins.contains(slot_num) || !slot_energy_spins.contains(slot_num)) {
+        return;
     }
 
-    // direct player health damage, requires additional energy
-    if (slotType == "health") {
-        this->slot_energy[slot_num] = round(amt * 2.5);
-    }
+    QString slotType = slot_types_combos.value(slot_num)->currentText();
+    int amount = slot_amounts_spins.value(slot_num)->value();
+    int life = slot_life_spins.contains(slot_num)
+            ? slot_life_spins.value(slot_num)->value()
+            : slot_life.value(slot_num, 0);
+    QJsonObject grid = slot_grids.value(slot_num, QJsonObject());
 
-    // if energy kills a hero, it will spill over to the next random hero, then to the player's health
-    // so this can be a bit smaller
-    if (slotType == "heros") {
-        this->slot_energy[slot_num] = round(amt * 1.5);
-    }
-    qDebug() << "Setting spinbox for slot" << slot_num << "energy to" << this->slot_energy.value(slot_num);
-    this->slot_energy_spins.value(slot_num)->setValue(this->slot_energy.value(slot_num));
+    slot_types[slot_num] = slotType;
+    slot_amounts[slot_num] = amount;
+    slot_life[slot_num] = life;
 
-
-
+    slot_energy[slot_num] = computeBalancedEnergy(slotType, amount, life, grid);
+    slot_energy_spins.value(slot_num)->setValue(slot_energy.value(slot_num));
 }
 
 void PowerupEditorDialog::updateAllEnergy()
 {
-    updateEnergy(0);
-    updateEnergy(1);
-    updateEnergy(2);
-    updateEnergy(3);
+    updateEnergy(-1);
     QTimer::singleShot(300, this, &PowerupEditorDialog::updateAllEnergy);
 }
 
@@ -289,6 +322,7 @@ QJsonArray PowerupEditorDialog::collectFormData(int slot_num) {
     slotObject["amount"] = amountBox->value();
     slotObject["color"] = colorBox->currentText();
     slotObject["grid"] = slot_grids.value(slot_num);
+    slotObject["life"] = slot_life.value(slot_num, slot_life_spins.contains(slot_num) ? slot_life_spins.value(slot_num)->value() : 0);
     slotObject["energy"] = slot_energy.value(slot_num);
 
 
@@ -336,6 +370,9 @@ void PowerupEditorDialog::loadPowerupsFromJSON() {
 
         // Populate slot_energy
         slot_energy[i] = powerupObject.value("energy").toInt();
+
+        // Populate slot_life
+        slot_life[i] = powerupObject.value("life").toInt();
 
         // Populate UI elements if they exist
 
@@ -390,6 +427,11 @@ void PowerupEditorDialog::updateWidgetsFromJSONArray(const QJsonArray &powerupsA
         if (slot_energy_spins.contains(i)) {
             int energy = powerupObject.value("energy").toInt(0);  // Default value is 0
             slot_energy_spins[i]->setValue(energy);
+        }
+        if (slot_life_spins.contains(i)) {
+            int life = powerupObject.value("life").toInt(0);
+            slot_life_spins[i]->setValue(life);
+            slot_life[i] = life;
         }
         QJsonObject jsonObj = powerupObject.value("grid").toObject();
         for (const QString& key : jsonObj.keys()) {
